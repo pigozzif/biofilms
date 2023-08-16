@@ -1,13 +1,12 @@
 import argparse
 import os
 import pickle
+import multiprocessing
+import random
 import time
 import logging
-from multiprocessing import Pool
 
-from listener import FileListener
-from utils import set_seed, create_solver, create_pattern
-from lattice import Lattice
+from biofilms.bacteria.lattice import Lattice
 
 import numpy as np
 import cv2
@@ -30,28 +29,35 @@ def parse_args():
     return parser.parse_args()
 
 
-def parallel_solve(solver, iterations, config, listener):
-    num_workers = config.np
-    if solver.popsize % num_workers != 0:
-        raise RuntimeError("better to have n. workers divisor of pop size")
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    # torch.manual_seed(seed)
+
+
+def parallel_solve(solver, config, listener):
     best_result = None
     best_fitness = float("-inf")
     start_time = time.time()
-    for j in range(iterations):
+    evaluated = 0
+    j = 0
+    while evaluated < config.evals:
         solutions = solver.ask()
-        with Pool(num_workers) as pool:
-            results = pool.map(parallel_wrapper, [(config, solutions[i], i) for i in range(solver.popsize)])
+        with multiprocessing.Pool(config.np) as pool:
+            results = pool.map(parallel_wrapper, [(config, solutions[i], i) for i in range(solver.pop_size)])
         fitness_list = [value for _, value in sorted(results, key=lambda x: x[0])]
         solver.tell(fitness_list)
         result = solver.result()  # first element is the best solution, second element is the best fitness
         if (j + 1) % 10 == 0:
             logging.warning("fitness at iteration {}: {}".format(j + 1, result[1]))
         listener.listen(**{"iteration": j, "elapsed.sec": time.time() - start_time,
-                           "evaluations": j * solver.popsize, "best.fitness": result[1],
+                           "evaluations": evaluated, "best.fitness": result[1],
                            "best.solution": result[0]})
         if result[1] >= best_fitness or best_result is None:
             best_result = result[0]
             best_fitness = result[1]
+        evaluated += len(solutions)
+        j += 1
     return best_result, best_fitness
 
 
@@ -80,7 +86,7 @@ def compute_fitness_landscape(config, file_name, num_workers=8):
     for x in range(0, 40000, 1000):
         for y in range(0, 200000, 1000):
             solutions.append([x, y])
-    with Pool(num_workers) as pool:
+    with multiprocessing.Pool(num_workers) as pool:
         results = pool.map(parallel_wrapper, [(config, solutions[i], i) for i in range(len(solutions))])
     with open(file_name, "wb") as file:
         pickle.dump(results, file)
@@ -91,7 +97,7 @@ def sample_fitness_landscape(config, num_workers):
     for x in range(0, 200000, 10000 * 2):
         for y in range(0, 500000, 15000 * 2):
             solutions.append([x, y])
-    with Pool(num_workers) as pool:
+    with multiprocessing.Pool(num_workers) as pool:
         results = pool.map(parallel_wrapper, [(config, solutions[i], i, ".".join([str(i), str(solutions[i]), "mp4"]))
                                               for i in range(len(solutions))])
 
@@ -126,16 +132,54 @@ def make_arras(directory, num_x=10, num_y=17):
     cv2.imwrite("arras.png", image)
 
 
+def create_pattern():
+    target = np.load("targets/orig.npy")
+    new_target = np.zeros_like(target)
+    radii = []
+    for i in range(0, 100, 50):
+        radii.append(i)
+    center = np.array([new_target.shape[0] / 2, new_target.shape[1] / 2])
+    for i, radius in enumerate(radii):
+        for x in range(target.shape[0]):
+            for y in range(target.shape[1]):
+                if np.linalg.norm(np.array([x, y]) - center) > radius:
+                    continue
+                elif x == 100 and y == 100:
+                    continue
+                new_target[x, y] = target.max() if i % 2 == 0 else target.min()
+    plt.imshow(new_target)
+    plt.savefig("test.png")
+    # np.save("targets/one.npy", new_target)
+
+
 if __name__ == "__main__":
     args = parse_args()
     set_seed(args.s)
     # sample_fitness_landscape(config=args, num_workers=args.np)
     # make_arras(".")
-    # file_name = ".".join([args.solver, args.task, str(args.s)])
+    # file_name = ".".join([args.solver, str(args.s), "txt"])
+    # objectives_dict = ObjectiveDict()
+    # objectives_dict.add_objective(name="fitness", maximize=False, best_value=0.0, worst_value=5.0)
     # listener = FileListener(file_name=file_name, header=["iteration", "elapsed.sec", "evaluations", "best.fitness",
     #                                                      "best.solution"])
-    # solver = create_solver(config=args)
-    # best = parallel_solve(solver=solver, iterations=args.evals // solver.popsize, config=args, listener=listener)
+    # solver = StochasticSolver.create_solver(name=args.solver,
+    #                                         seed=args.s,
+    #                                         num_params=args.n_params,
+    #                                         pop_size=100,
+    #                                         genotype_factory="uniform_float",
+    #                                         objectives_dict=objectives_dict,
+    #                                         offspring_size=100,
+    #                                         remap=False,
+    #                                         genetic_operators={"gaussian_mut": 1.0},
+    #                                         genotype_filter=None,
+    #                                         tournament_size=5,
+    #                                         mu=0.0,
+    #                                         sigma=5000,
+    #                                         n=args.n_params,
+    #                                         range=(0, 1000000),
+    #                                         upper=1000000,
+    #                                         lower=0)
+    # best = parallel_solve(solver=solver, config=args, listener=listener)
     # logging.warning("fitness score at this local optimum: {}".format(best[1]))
     # best = [float(x) for x in open(FileListener.get_log_file_name(file_name), "r").readlines()[-1].split(";")[-1].strip().strip("[]").
     #         split(" ")[1:]]
