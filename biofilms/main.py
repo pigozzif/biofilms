@@ -1,12 +1,12 @@
 import argparse
 import os
 import pickle
-import multiprocessing
+from multiprocessing import Pool
 import random
 import time
 import logging
 
-from biofilms.bacteria.lattice import Lattice
+from bacteria.lattice import Lattice
 
 import numpy as np
 import cv2
@@ -16,10 +16,10 @@ import cv2
 def parse_args():
     parser = argparse.ArgumentParser(prog="BiofilmSimulation", description="Simulate a B. subtilis biofilm")
     parser.add_argument("--s", type=int, default=0, help="seed")
-    parser.add_argument("--w", type=int, default=401, help="width in cells of the biofilm")
-    parser.add_argument("--h", type=int, default=401, help="height in cells of the biofilm")
+    parser.add_argument("--w", type=int, default=201, help="width in cells of the biofilm")
+    parser.add_argument("--h", type=int, default=201, help="height in cells of the biofilm")
     parser.add_argument("--dt", type=float, default=0.3, help="integration step")
-    parser.add_argument("--t", type=int, default=200, help="max simulation steps")
+    parser.add_argument("--t", type=int, default=100, help="max simulation steps")
     parser.add_argument("--p", type=str, default="clock", help="problem")
     parser.add_argument("--np", type=int, default=1, help="parallel optimization processes")
     parser.add_argument("--solver", type=str, default="afpo", help="solver")
@@ -43,7 +43,7 @@ def parallel_solve(solver, config, listener):
     j = 0
     while evaluated < config.evals:
         solutions = solver.ask()
-        with multiprocessing.Pool(config.np) as pool:
+        with Pool(config.np) as pool:
             results = pool.map(parallel_wrapper, [(config, solutions[i], i) for i in range(solver.pop_size)])
         fitness_list = [value for _, value in sorted(results, key=lambda x: x[0])]
         solver.tell(fitness_list)
@@ -86,7 +86,7 @@ def compute_fitness_landscape(config, file_name, num_workers=8):
     for x in range(0, 40000, 1000):
         for y in range(0, 200000, 1000):
             solutions.append([x, y])
-    with multiprocessing.Pool(num_workers) as pool:
+    with Pool(num_workers) as pool:
         results = pool.map(parallel_wrapper, [(config, solutions[i], i) for i in range(len(solutions))])
     with open(file_name, "wb") as file:
         pickle.dump(results, file)
@@ -97,7 +97,7 @@ def sample_fitness_landscape(config, num_workers):
     for x in range(0, 200000, 10000 * 2):
         for y in range(0, 500000, 15000 * 2):
             solutions.append([x, y])
-    with multiprocessing.Pool(num_workers) as pool:
+    with Pool(num_workers) as pool:
         results = pool.map(parallel_wrapper, [(config, solutions[i], i, ".".join([str(i), str(solutions[i]), "mp4"]))
                                               for i in range(len(solutions))])
 

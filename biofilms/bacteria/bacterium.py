@@ -10,11 +10,11 @@ class Bacterium(abc.ABC):
         self.idx = idx
 
     @abc.abstractmethod
-    def propagate(self, lattice, t, dt):
+    def propagate(self, lattice, t, dt, d):
         pass
 
     @abc.abstractmethod
-    def draw(self, min_val, max_val):
+    def draw(self, t, min_val, max_val):
         pass
 
 
@@ -55,7 +55,7 @@ class SignallingBacterium(Bacterium):
     #     self.u_old = self.ut
     #     self.firing = self._is_firing(self.u_old)
 
-    def propagate(self, lattice, t, dt):
+    def propagate(self, lattice, t, dt, d):
         return
 
     def FitzHughNagumo_percolate(self, t, y, lattice, dt):
@@ -67,7 +67,7 @@ class SignallingBacterium(Bacterium):
         dy = self.epsilon * (y[self.idx] * (1 - y[self.idx]) * (y[self.idx] - self.u0) - self.integral / tau) + messages
         return dy
 
-    def draw(self, min_val, max_val):
+    def draw(self, t, min_val, max_val):
         raise NotImplementedError
 
 
@@ -102,14 +102,12 @@ class ClockBacterium(Bacterium):
     eta = 2.0
     epsilon = 0.13
 
-    def __init__(self, idx):
+    def __init__(self, idx, y, t, max_t):
         super().__init__(idx)
-        self.r = 0.0
+        self.y = np.zeros((max_t, len(y)))
+        self.y[t] = y
         self.is_frontier = True
         self.age = 0
-
-    def set_vars(self, y):
-        self.r = y[8]
 
     @staticmethod
     def update_E(e, a, o, q, s, n):
@@ -155,14 +153,14 @@ class ClockBacterium(Bacterium):
     def update_W():
         return ClockBacterium.eta
 
-    def _get_distance(self, lattice):
-        return self.r_0 + self.r_0 * min(self.age, lattice.w // 2, lattice.h // 2)
-
-    def _freeze_term(self, t, lattice):
-        return self.epsilon / (1.0 + self.eta * (self.r_0 + self.k * t - self._get_distance(lattice=lattice)))
-
-    def propagate(self, lattice, t, dt):
-        return
+    def propagate(self, lattice, t, dt, d):
+        if self.is_frontier:
+            dy = ClockBacterium.NasA_oscIII_D(t=t, y=self.y[t - 1])
+        else:
+            dy = ClockBacterium.NasA_oscIII_eta(t=t, y=self.y[t - 1])
+        dy[5] += lattice.diffuse(i=t, cell=d, idx=5)
+        dy[7] += lattice.diffuse(i=t, cell=d, idx=7)
+        self.y[t] = self.y[t - 1] + dt * dy
 
     @staticmethod
     def _deltas(y):
@@ -175,7 +173,7 @@ class ClockBacterium(Bacterium):
                          ClockBacterium.update_N(e=y[5], s=y[4], n=y[6]),
                          ClockBacterium.update_O(e=y[5], a=y[3], o=y[7], q=y[0]),
                          ClockBacterium.update_R(t=y[2], r=y[8]),
-                         ClockBacterium.update_W()
+                         0.0
                          ])
 
     @staticmethod
@@ -185,24 +183,13 @@ class ClockBacterium(Bacterium):
         return dy
 
     @staticmethod
-    def NasA_oscIII_eta(t, y):  #, rs, dt):
+    def NasA_oscIII_eta(t, y):
         dy = ClockBacterium._deltas(y=y)
         dy *= (ClockBacterium.epsilon / (1.0 + y[9]))
-        #t_step = int(t // dt)
-        #if t_step == 0:
-        #    d_r = 1
-        #elif t_step == 1:
-        #    d_r = int(rs[t_step - 1] - 1)
-        #else:
-        #    d_r = int(rs[t_step - 1] - rs[t_step - 2])
-        return dy  # np.concatenate((dy, np.array([ClockBacterium.eta * d_r])))
+        dy[9] = ClockBacterium.update_W()
+        return dy
 
-    def draw(self, min_val, max_val):
+    def draw(self, t, min_val, max_val):
         import matplotlib.pyplot as plt
-        c = plt.cm.Greens((self.r - min_val) / (max_val - min_val))
+        c = plt.cm.Greens((self.y[t, 8] - min_val) / (max_val - min_val))
         return c[0] * 255.0, c[1] * 255.0, c[2] * 255.0
-
-    @staticmethod
-    def get_frontier(lattice):
-        return [d for _, d in lattice.get_lattice().nodes(data=True) if d["cell"] is not None
-                and d["cell"].is_frontier]
