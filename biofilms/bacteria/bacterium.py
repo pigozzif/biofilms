@@ -104,10 +104,15 @@ class ClockBacterium(Bacterium):
 
     def __init__(self, idx, y, t, max_t):
         super().__init__(idx)
-        self.y = np.zeros((max_t, len(y)))
-        self.y[t] = y
+        self.y = self.init_y(max_t=max_t, t=t, y_0=y)
         self.is_frontier = True
         self.age = 0
+        self.distance = 0.0
+
+    def init_y(self, max_t, t, y_0):
+        y = np.zeros((max_t, len(y_0)))
+        y[t] = y_0
+        return y
 
     @staticmethod
     def update_E(e, a, o, q, s, n):
@@ -157,7 +162,7 @@ class ClockBacterium(Bacterium):
         if self.is_frontier:
             dy = ClockBacterium.NasA_oscIII_D(t=t, y=self.y[t - 1])
         else:
-            dy = ClockBacterium.NasA_oscIII_eta(t=t, y=self.y[t - 1])
+            dy = ClockBacterium.NasA_oscIII_eta(t=t, y=self.y[t - 1], d=self.distance)
         dy[5] += lattice.diffuse(i=t, cell=d, idx=5)
         dy[7] += lattice.diffuse(i=t, cell=d, idx=7)
         self.y[t] = self.y[t - 1] + dt * dy
@@ -183,10 +188,10 @@ class ClockBacterium(Bacterium):
         return dy
 
     @staticmethod
-    def NasA_oscIII_eta(t, y):
+    def NasA_oscIII_eta(t, y, d):
+        y[9] = d
         dy = ClockBacterium._deltas(y=y)
         dy *= (ClockBacterium.epsilon / (1.0 + y[9]))
-        dy[9] = ClockBacterium.update_W()
         return dy
 
     def draw(self, t, min_val, max_val):

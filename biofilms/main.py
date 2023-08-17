@@ -11,13 +11,15 @@ from bacteria.lattice import Lattice
 import numpy as np
 import cv2
 # import matplotlib.pyplot as plt
+from evo.listeners.listener import FileListener
+from evo.evolution.objectives import ObjectiveDict
 
 
 def parse_args():
     parser = argparse.ArgumentParser(prog="BiofilmSimulation", description="Simulate a B. subtilis biofilm")
     parser.add_argument("--s", type=int, default=0, help="seed")
-    parser.add_argument("--w", type=int, default=201, help="width in cells of the biofilm")
-    parser.add_argument("--h", type=int, default=201, help="height in cells of the biofilm")
+    parser.add_argument("--w", type=int, default=20, help="width in cells of the biofilm")
+    parser.add_argument("--h", type=int, default=20, help="height in cells of the biofilm")
     parser.add_argument("--dt", type=float, default=0.3, help="integration step")
     parser.add_argument("--t", type=int, default=100, help="max simulation steps")
     parser.add_argument("--p", type=str, default="clock", help="problem")
@@ -72,11 +74,14 @@ def simulation(config, solution, video_name):
     world = Lattice.create_lattice(name=config.p, w=config.w, h=config.h, dt=config.dt, max_t=config.t, phi_c=0.43,
                                    task=config.task, video_name=video_name)
     world.set_params(params=solution)
-    world.solve(dt=config.dt)
+    err = []
+    for inputs, truth in zip([[0, 0], [0, 1], [1, 0], [1, 1]], [[0], [1], [1], [1]]):
+        outputs = world.solve(inputs=inputs)
+        print(inputs, truth, outputs)
+        err.append((truth[0] - outputs[0]) ** 2)
     if video_name is not None:
         world.render(video_name=video_name)
-    # fitness = world.get_fitness()
-    return 0.0  # fitness
+    return sum(err) / len(err)  # fitness
 
 
 def compute_fitness_landscape(config, file_name, num_workers=8):

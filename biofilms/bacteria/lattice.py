@@ -15,7 +15,7 @@ from bacteria.bacterium import SignallingBacterium, ClockBacterium
 class Lattice(abc.ABC):
     cell_height = 1.0
     cell_width = 1.0
-    magnify = 10.0
+    magnify = 100.0
 
     def __init__(self, w, h, dt, max_t, is_init_cell, *args):
         self.w = w
@@ -24,6 +24,8 @@ class Lattice(abc.ABC):
         self.dt = dt
         self.max_t = max_t
         self.is_init_cell = is_init_cell
+        self.input_cells = []
+        self.output_cells = []
         self._lattice = self.init_lattice(args)
 
     def get_lattice(self):
@@ -173,18 +175,23 @@ class SignallingLattice(Lattice):
 
 
 class ClockLattice(Lattice):
-    D = 0.0
+    D = 0.5
     init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1,
                        0.0]
 
     def __init__(self, w, h, dt, max_t, task):
-        super().__init__(w, h, dt, max_t, lambda x, y: (x == h // 2 and y == w // 2))
+        super().__init__(w, h, dt, max_t, lambda x, y: 0 < y < w - 1 and 0 < x < h - 1)
         self._connect_square_lattice()
         self.dt = dt
         self.task = task
-        self.frontier = [d for _, d in self._lattice.nodes(data=True)
-                         if d["cell"] is not None and d["cell"].is_frontier]
-        self.seed = [f for f in self.frontier]  # BE CAREFUL WITH MORE COMPLEX SEEDS
+        self.frontier = []
+        for _, d in self._lattice.nodes(data=True):
+            if d["cell"] is None:
+                continue
+            elif any([n["cell"] is None for n in self.get_neighborhood(d)]):
+                self.frontier.append(d)
+            else:
+                d["cell"].is_frontier = False
         self._update_distances()
 
     def init_lattice(self, *args):
@@ -205,9 +212,11 @@ class ClockLattice(Lattice):
                                  row=row,
                                  col=col,
                                  cx=col * self.cell_width + self.cell_width / 2.0,
-                                 cy=row * self.cell_height + self.cell_height / 2.0,
-                                 history=[],
-                                 distance=float("inf"))
+                                 cy=row * self.cell_height + self.cell_height / 2.0)
+                if row == 1 and col == self.w // 2:
+                    self.output_cells.append(cell)
+                if row == self.h - 2 and (col == self.h * 0.3 or col == self.h * 0.6):
+                    self.input_cells.append(cell)
                 i += 1
         return lattice
 
@@ -221,9 +230,9 @@ class ClockLattice(Lattice):
 
     def _update_distances(self):
         for _, d in self._lattice.nodes(data=True):
-            nx.set_node_attributes(self._lattice, values={
-                d["i"]: min([math.sqrt((d["cx"] - s["cx"]) ** 2 + (d["cy"] - s["cy"]) ** 2) for s in self.seed])},
-                                   name="distance")
+            if d["cell"] is not None:
+                d["cell"].distance = round(min([abs(d["cx"] - s["cx"]) + abs(d["cy"] - s["cy"])
+                                                for s in self.frontier]))
 
     def diffuse(self, i, cell, idx):  # IS DIFFUSION AMONG BACTERIA ONLY?
         return - self.D * sum([cell["cell"].y[i - 1, idx] - n["cell"].y[i - 1, idx]
@@ -262,11 +271,17 @@ class ClockLattice(Lattice):
         ClockBacterium.alpha_e = params[0]
         ClockBacterium.alpha_o = params[1]
 
-    def solve(self, dt):
+    def solve(self, inputs):
+        for _, d in self._lattice.nodes(data=True):
+            if d["cell"] is not None:
+                d["cell"].init_y(max_t=self.max_t, t=0, y_0=self.init_conditions)
+        for cell, inp in zip(self.input_cells, inputs):
+            cell.y[0, 5] = inp * 10000
         for i in range(1, self.max_t):
             self._metabolize(i=i)
-            self._grow(i=i)
-            self._update_ages()
+            for cell, inp in zip(self.input_cells, inputs):
+                cell.y[i, 5] = inp * 10000
+        return [cell.y[self.max_t - 1, 8] for cell in self.output_cells]
 
     def _draw_cell(self, i, image, d, min_val, max_val):
         cv2.rectangle(image,
