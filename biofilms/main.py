@@ -9,7 +9,7 @@ from bacteria.lattice import Lattice
 
 import numpy as np
 
-from evo.evolution.selection.filters import ConnectedFilter
+from evo.utils.utilities import parse_largest_component, fill_morphology
 from evo.evolution.algorithms import StochasticSolver
 from evo.listeners.listener import FileListener
 from evo.evolution.objectives import ObjectiveDict
@@ -26,9 +26,9 @@ def parse_args():
     parser.add_argument("--t", type=int, default=100, help="max simulation steps")
     parser.add_argument("--p", type=str, default="clock", help="problem")
     parser.add_argument("--np", type=int, default=7, help="parallel optimization processes")
-    parser.add_argument("--solver", type=str, default="afpo", help="solver")
+    parser.add_argument("--solver", type=str, default="neat", help="solver")
     parser.add_argument("--n_params", type=int, default=SIZE * SIZE, help="solution size")
-    parser.add_argument("--evals", type=int, default=50, help="fitness evaluations")
+    parser.add_argument("--evals", type=int, default=5000, help="fitness evaluations")
     return parser.parse_args()
 
 
@@ -58,9 +58,9 @@ def parallel_solve(solver, config, listener):
             logging.warning("fitness at iteration {}: {}".format(j + 1, best_fitness))
         listener.listen(**{"iteration": j, "elapsed.sec": time.time() - start_time,
                            "evaluations": evaluated, "best.fitness": best_fitness,
-                           "best.solution": ConnectedFilter.parse_largest_component(
-                               item=best_result.reshape(SIZE, SIZE)).astype(int)})
-        evaluated += len(solutions)
+                           "best.solution": parse_largest_component(fill_morphology(best_result, solver.config, config)).astype(int)})
+        evaluated += solver.get_num_evaluated() - evaluated
+        # print(evaluated)
         j += 1
     return best_result, best_fitness
 
@@ -68,12 +68,14 @@ def parallel_solve(solver, config, listener):
 def parallel_wrapper(arg):
     solution, i, c = arg
     fitness = simulation(config=c, solution=solution, video_name=None)
-    print(i)
+    # print(i)
     return i, -fitness
 
 
 def simulation(config, solution, video_name):
-    parsed_solution = ConnectedFilter.parse_largest_component(item=solution.reshape(SIZE, SIZE))
+    parsed_solution = parse_largest_component(solution=solution.reshape(SIZE, SIZE))
+    if parsed_solution is None:
+        return float("inf")
     world = Lattice.create_lattice(name=config.p, w=config.w, h=config.h, dt=config.dt, max_t=config.t, phi_c=0.43,
                                    solution=parsed_solution, video_name=video_name)
     err = []
@@ -121,21 +123,27 @@ if __name__ == "__main__":
     solver = StochasticSolver.create_solver(name=args.solver,
                                             seed=args.s,
                                             num_params=args.n_params,
-                                            pop_size=100,
-                                            genotype_factory="uniform_float",
+                                            pop_size=50,
+                                            # genotype_factory="uniform_float",
                                             objectives_dict=objectives_dict,
-                                            offspring_size=100,
-                                            remap=False,
-                                            genetic_operators={"gaussian_mut": 1.0},
-                                            genotype_filter="connected",
-                                            tournament_size=5,
-                                            mu=0.0,
-                                            sigma=0.35,
-                                            n=args.n_params,
-                                            range=(-1, 1))
+                                            # offspring_size=100,
+                                            # remap=False,
+                                            # genetic_operators={"gaussian_mut": 1.0},
+                                            # genotype_filter="connected",
+                                            # tournament_size=5,
+                                            # mu=0.0,
+                                            # sigma=0.35,
+                                            # n=args.n_params,
+                                            # range=(-1, 1))
+                                            num_inputs=2,
+                                            num_outputs=1,
+                                            np=args.np,
+                                            fitness_func=parallel_wrapper,
+                                            config=args)
     best = parallel_solve(solver=solver, config=args, listener=listener)
     logging.warning("fitness score at this local optimum: {}".format(best[1]))
     # best = np.array([float(x) for x in open(file_name, "r").readlines()[-1].split(";")[-1].strip().strip("[]").
     #                 split(" ")[1:]])
     # orig: [20000, 100000], uneven: [90000, 100000], one: [100000, 800000]
-    print(simulation(config=args, solution=best[0], video_name="best.mp4"))  # ".".join([file_name, "video", "mp4"])))
+    print(simulation(config=args, solution=parse_largest_component(fill_morphology(best[0], solver.config, args)),
+                     video_name="best.mp4"))  # ".".join([file_name, "video", "mp4"])))
