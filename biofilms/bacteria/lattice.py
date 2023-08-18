@@ -72,7 +72,7 @@ class Lattice(abc.ABC):
         if name == "signalling":
             return SignallingLattice(kwargs["w"], kwargs["h"], kwargs["dt"], kwargs["max_t"], kwargs["phi_c"])
         elif name == "clock":
-            return ClockLattice(kwargs["w"], kwargs["h"], kwargs["dt"], kwargs["max_t"], kwargs["task"])
+            return ClockLattice(kwargs["w"], kwargs["h"], kwargs["dt"], kwargs["max_t"], kwargs["solution"])
         raise ValueError("Invalid lattice name: {}".format(name))
 
 
@@ -179,11 +179,10 @@ class ClockLattice(Lattice):
     init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1,
                        0.0]
 
-    def __init__(self, w, h, dt, max_t, task):
-        super().__init__(w, h, dt, max_t, lambda x, y: 0 < y < w - 1 and 0 < x < h - 1)
+    def __init__(self, w, h, dt, max_t, solution):
+        super().__init__(w, h, dt, max_t, lambda x, y: 0 < x < w - 1 and 0 < y < h - 1 and solution[x - 1, y - 1])
         self._connect_square_lattice()
         self.dt = dt
-        self.task = task
         self.frontier = []
         for _, d in self._lattice.nodes(data=True):
             if d["cell"] is None:
@@ -215,7 +214,7 @@ class ClockLattice(Lattice):
                                  cy=row * self.cell_height + self.cell_height / 2.0)
                 if row == 1 and col == self.w // 2:
                     self.output_cells.append(cell)
-                if row == self.h - 2 and (col == self.h * 0.3 or col == self.h * 0.6):
+                if row == self.h - 2 and (col == round(self.h * 0.3) or col == round(self.h * 0.6)):
                     self.input_cells.append(cell)
                 i += 1
         return lattice
