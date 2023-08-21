@@ -80,7 +80,7 @@ def simulation(config, solution, video_name):
                                    solution=parsed_solution, video_name=video_name)
     err = []
     # for inputs, truth in zip([[0, 0], [0, 1], [1, 0], [1, 1]], [[0], [1], [1], [1]]):
-    for inputs, truth in zip([[0, 0], [1, 0]], [[1], [0]]):
+    for inputs, truth in zip([[0, 0]], [[1]]):#, [1, 0]], [[1], [0]]):
         outputs = world.solve(inputs=inputs)
         err.append((truth[0] - outputs[0]) ** 2)
     if video_name is not None:
@@ -135,7 +135,7 @@ if __name__ == "__main__":
                                             # sigma=0.35,
                                             # n=args.n_params,
                                             # range=(-1, 1))
-                                            num_inputs=2,
+                                            num_inputs=3,
                                             num_outputs=1,
                                             np=args.np,
                                             fitness_func=parallel_wrapper,
