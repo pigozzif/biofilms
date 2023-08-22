@@ -173,7 +173,7 @@ class SignallingLattice(Lattice):
 
 
 class ClockLattice(Lattice):
-    D = 0.0
+    D = 0.5
     init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1,
                        0.0]
 
@@ -184,7 +184,9 @@ class ClockLattice(Lattice):
         self.task = task
         self.frontier = [d for _, d in self._lattice.nodes(data=True)
                          if d["cell"] is not None and d["cell"].is_frontier]
-        self.seed = [f for f in self.frontier]  # BE CAREFUL WITH MORE COMPLEX SEEDS
+        self.seed = [f for f in self.frontier]  # TODO: BE CAREFUL WITH MORE COMPLEX SEEDS
+        self.dy = None
+        self.gen = 0
         self._update_distances()
 
     def init_lattice(self, *args):
@@ -204,6 +206,7 @@ class ClockLattice(Lattice):
                                  cell=cell,
                                  row=row,
                                  col=col,
+                                 idx=self._get_1d_index(row=row, col=col, idx=0),
                                  cx=col * self.cell_width + self.cell_width / 2.0,
                                  cy=row * self.cell_height + self.cell_height / 2.0,
                                  history=[],
@@ -219,35 +222,47 @@ class ClockLattice(Lattice):
                         and abs(self._lattice.nodes[neigh]["col"] - d["col"]) <= 1.0:
                     self._lattice.add_edge(node, neigh)
 
+    def _get_1d_index(self, row, col, idx):
+        return idx + len(self.init_conditions) * (row + self.h * col)  # z + depth * (y + height * x)
+
     def _update_distances(self):
         for _, d in self._lattice.nodes(data=True):
             nx.set_node_attributes(self._lattice, values={
                 d["i"]: min([math.sqrt((d["cx"] - s["cx"]) ** 2 + (d["cy"] - s["cy"]) ** 2) for s in self.seed])},
                                    name="distance")
 
-    def diffuse(self, i, cell, idx):  # IS DIFFUSION AMONG BACTERIA ONLY?
+    def diffuse(self, i, cell, idx):  # TODO: IS DIFFUSION AMONG BACTERIA ONLY?
         return - self.D * sum([cell["cell"].y[i - 1, idx] - n["cell"].y[i - 1, idx]
                                for n in self.get_neighborhood(cell=cell) if n["cell"] is not None])
 
     def _select_parent(self, cell):
-        return random.choice([d for d in self.get_neighborhood(cell=cell) if d["cell"] is not None])
+        return random.choice([d for d in self.get_neighborhood(cell=cell) if d["cell"] is not None
+                              and d["cell"].is_frontier])
 
-    def _metabolize(self, i):
+    def _metabolize(self, t, y):
         for _, d in self._lattice.nodes(data=True):
             if d["cell"] is not None:
-                d["cell"].propagate(lattice=self, t=i, dt=self.dt, d=d)
+                self.dy[d["idx"]: d["idx"] + len(self.init_conditions)] = d["cell"].propagate(lattice=self,
+                                                                                              t=self.gen,
+                                                                                              y=y[d["idx"]: d["idx"]
+                                                                                                            + len(
+                                                                                                  self.init_conditions)],
+                                                                                              dt=self.dt,
+                                                                                              d=d)
 
-    def _grow(self, i):
+    def _grow(self, t, y):
         n_f = len(self.frontier)
         for node, d in self._lattice.nodes(data=True):
-            if d["cell"] is None and (i - 1) * self.cell_width <= d["distance"] <= i * self.cell_width:
+            if d["cell"] is None and self.gen * self.cell_width <= d["distance"] <= (self.gen + 1) * self.cell_width:
                 parent = self._select_parent(cell=d)
                 nx.set_node_attributes(self._lattice,
                                        values={node: ClockBacterium(idx=node,
-                                                                    t=i,
-                                                                    y=parent["cell"].y[i],
+                                                                    t=self.gen,
+                                                                    y=parent["cell"].y[self.gen],
                                                                     max_t=self.max_t)},
                                        name="cell")
+                self.dy[d["idx"]: d["idx"] + len(self.init_conditions)] = \
+                    y[parent["idx"]: parent["idx"] + len(self.init_conditions)]
                 self.frontier.append(d)
         for j in range(n_f):
             f = self.frontier.pop(0)
@@ -258,15 +273,28 @@ class ClockLattice(Lattice):
             if d["cell"] is not None:
                 d["cell"].age += 1
 
+    def step(self, t, y):
+        print(t)
+        self._metabolize(t=t, y=y)
+        self._grow(t=t, y=y)
+        self._update_ages()
+        self.gen += 1
+        return self.dy
+
     def set_params(self, params):
         ClockBacterium.alpha_e = params[0]
         ClockBacterium.alpha_o = params[1]
 
     def solve(self, dt):
-        for i in range(1, self.max_t):
-            self._metabolize(i=i)
-            self._grow(i=i)
-            self._update_ages()
+        y0 = np.zeros(self.h * self.w * len(self.init_conditions))
+        c = self._get_1d_index(row=self.h // 2, col=self.w // 2, idx=0)
+        y0[c: c + len(self.init_conditions)] = self.init_conditions  # TODO: LESS HARDCODED
+        self.dy = np.zeros_like(y0)
+        sol = solve_ivp(fun=self.step,
+                        t_span=[0.0, self.max_t * self.dt],
+                        y0=y0,
+                        t_eval=[j * self.dt for j in range(self.max_t)])
+        print(sol.y.shape, self.dy.shape)
 
     def _draw_cell(self, i, image, d, min_val, max_val):
         cv2.rectangle(image,
