@@ -7,7 +7,6 @@ import numpy as np
 import cv2
 import networkx as nx
 from scipy.integrate import solve_ivp
-from shapely.geometry import Point, Polygon
 
 from bacteria.bacterium import SignallingBacterium, ClockBacterium
 
@@ -173,7 +172,7 @@ class SignallingLattice(Lattice):
 
 
 class ClockLattice(Lattice):
-    D = 0.0
+    D = 0.5
     init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1,
                        0.0]
 
@@ -184,7 +183,7 @@ class ClockLattice(Lattice):
         self.task = task
         self.frontier = [d for _, d in self._lattice.nodes(data=True)
                          if d["cell"] is not None and d["cell"].is_frontier]
-        self.seed = [f for f in self.frontier]  # BE CAREFUL WITH MORE COMPLEX SEEDS
+        self.seed = [f for f in self.frontier]  # TODO: BE CAREFUL WITH MORE COMPLEX SEEDS
         self._update_distances()
 
     def init_lattice(self, *args):
@@ -225,7 +224,7 @@ class ClockLattice(Lattice):
                 d["i"]: min([math.sqrt((d["cx"] - s["cx"]) ** 2 + (d["cy"] - s["cy"]) ** 2) for s in self.seed])},
                                    name="distance")
 
-    def diffuse(self, i, cell, idx):  # IS DIFFUSION AMONG BACTERIA ONLY?
+    def diffuse(self, i, cell, idx):  # TODO: IS DIFFUSION AMONG BACTERIA ONLY?
         return - self.D * sum([cell["cell"].y[i - 1, idx] - n["cell"].y[i - 1, idx]
                                for n in self.get_neighborhood(cell=cell) if n["cell"] is not None])
 

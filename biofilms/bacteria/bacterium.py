@@ -173,20 +173,19 @@ class ClockBacterium(Bacterium):
                          ClockBacterium.update_N(e=y[5], s=y[4], n=y[6]),
                          ClockBacterium.update_O(e=y[5], a=y[3], o=y[7], q=y[0]),
                          ClockBacterium.update_R(t=y[2], r=y[8]),
-                         0.0
+                         ClockBacterium.update_W()
                          ])
 
     @staticmethod
     def NasA_oscIII_D(t, y):
         dy = ClockBacterium._deltas(y=y)
-        dy *= ClockBacterium.epsilon
+        dy[: -1] *= ClockBacterium.epsilon
         return dy
 
     @staticmethod
     def NasA_oscIII_eta(t, y):
         dy = ClockBacterium._deltas(y=y)
-        dy *= (ClockBacterium.epsilon / (1.0 + y[9]))
-        dy[9] = ClockBacterium.update_W()
+        dy[: -1] *= (ClockBacterium.epsilon / (1.0 + y[9]))
         return dy
 
     def draw(self, t, min_val, max_val):
