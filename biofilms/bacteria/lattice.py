@@ -173,14 +173,14 @@ class SignallingLattice(Lattice):
 
 class ClockLattice(Lattice):
     D = 0.5
-    init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1,
-                       0.0]
+    init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1]
 
     def __init__(self, w, h, dt, max_t, task):
         super().__init__(w, h, dt, max_t, lambda x, y: (x == h // 2 and y == w // 2))
         self._connect_square_lattice()
         self.dt = dt
         self.task = task
+        self.sols = []
         self.frontier = [d for _, d in self._lattice.nodes(data=True)
                          if d["cell"] is not None and d["cell"].is_frontier]
         self.seed = [f for f in self.frontier]  # TODO: BE CAREFUL WITH MORE COMPLEX SEEDS
@@ -192,10 +192,7 @@ class ClockLattice(Lattice):
         for row in range(self.h):
             for col in range(self.w):
                 if self.is_init_cell(row, col):
-                    cell = ClockBacterium(idx=i,
-                                          t=0,
-                                          y=self.init_conditions,
-                                          max_t=self.max_t)
+                    cell = ClockBacterium(idx=i)
                 else:
                     cell = None
                 lattice.add_node(i,
@@ -240,12 +237,8 @@ class ClockLattice(Lattice):
         n_f = len(self.frontier)
         for node, d in self._lattice.nodes(data=True):
             if d["cell"] is None and (i - 1) * self.cell_width <= d["distance"] <= i * self.cell_width:
-                parent = self._select_parent(cell=d)
                 nx.set_node_attributes(self._lattice,
-                                       values={node: ClockBacterium(idx=node,
-                                                                    t=i,
-                                                                    y=parent["cell"].y[i],
-                                                                    max_t=self.max_t)},
+                                       values={node: ClockBacterium(idx=node)},
                                        name="cell")
                 self.frontier.append(d)
         for j in range(n_f):
@@ -257,36 +250,69 @@ class ClockLattice(Lattice):
             if d["cell"] is not None:
                 d["cell"].age += 1
 
+    def _correct_age(self):
+        for _, d in self._lattice.nodes(data=True):
+            if d["cell"] is None:
+                continue
+            elif d["cell"].age == 1:
+                d["cell"].age = self.max_t
+
     def set_params(self, params):
         ClockBacterium.alpha_e = params[0]
         ClockBacterium.alpha_o = params[1]
 
+    def _sols2cells(self):
+        for _, d in self._lattice.nodes(data=True):
+            if d["cell"] is None:
+                continue
+            d["cell"].y = self.sols[len(self.sols) - self.max_t + d["cell"].age - 1].y
+
     def solve(self, dt):
-        for i in range(1, self.max_t):
-            self._metabolize(i=i)
+        for i in range(self.max_t):
             self._grow(i=i)
             self._update_ages()
+        # self._correct_age()
+        sol_frontier = solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
+                                 t_span=[0.0, self.max_t * self.dt],
+                                 t_eval=[i * self.dt for i in range(self.max_t)],
+                                 y0=self.init_conditions)
+        self.sols.append(sol_frontier)
+        for i in range(self.max_t - 1):
+            sol = solve_ivp(fun=ClockBacterium.NasA_oscIII_eta,
+                            t_span=[0.0, (self.max_t - i - 1) * self.dt],
+                            t_eval=[j * self.dt for j in range(self.max_t - i - 1)],
+                            y0=np.concatenate((sol_frontier.y[:, i + 1], np.zeros(1))))
+            self.sols.append(sol)
+            if sol.y.shape[1] != self.max_t - i - 1:
+                raise RuntimeError("Integration failed at step {0}: {1}".format(i, sol.y.shape))
+        # self._sols2cells()
 
-    def _draw_cell(self, i, image, d, min_val, max_val):
+    def _draw_cell(self, val, image, d, min_val, max_val):
         cv2.rectangle(image,
                       (int((d["cx"] - self.cell_width / 2) * self.magnify),
                        int((d["cy"] - self.cell_height / 2) * self.magnify)),
                       (int((d["cx"] + self.cell_width / 2) * self.magnify),
                        int((d["cy"] + self.cell_height / 2) * self.magnify)),
-                      color=d["cell"].draw(t=i, min_val=min_val, max_val=max_val),
+                      color=d["cell"].draw(val=val, min_val=min_val, max_val=max_val),
                       thickness=-1)
 
     def render(self, video_name):
         image = self._fill_canvas()
         fourcc = cv2.VideoWriter_fourcc(*'MP4V')
         renderer = cv2.VideoWriter(video_name, fourcc, 20, (image.shape[1], image.shape[0]))
-        min_val = min([np.min(d["cell"].y[:, 8]) for _, d in self._lattice.nodes(data=True) if d["cell"] is not None])
-        max_val = max([np.max(d["cell"].y[:, 8]) for _, d in self._lattice.nodes(data=True) if d["cell"] is not None])
+        min_val = min([np.min(sol.y[8, :]) for sol in self.sols])
+        max_val = max([np.max(sol.y[8, :]) for sol in self.sols])
         for i in range(self.max_t):
             for _, d in self._lattice.nodes(data=True):
-                if d["cell"] is None:
+                if d["cell"] is None or d["cell"].age < self.max_t - i:
                     continue
-                self._draw_cell(i=i, image=image, d=d, min_val=min_val, max_val=max_val)
+                diff = self.max_t - d["cell"].age
+                if diff == i:
+                    val = self.sols[0].y[8, i]
+                else:
+                    sol = self.sols[diff]
+                    val = sol.y[8, i - (self.max_t - sol.y.shape[1])]
+                self._draw_cell(val=val, image=image, d=d, min_val=min_val, max_val=max_val)
             cv2.putText(image,
                         text="Min response: {}".format(round(min_val, 3)),
                         org=(int((self.w - 50) * self.magnify), int(10 * self.magnify)),

@@ -102,10 +102,8 @@ class ClockBacterium(Bacterium):
     eta = 2.0
     epsilon = 0.13
 
-    def __init__(self, idx, y, t, max_t):
+    def __init__(self, idx):
         super().__init__(idx)
-        self.y = np.zeros((max_t, len(y)))
-        self.y[t] = y
         self.is_frontier = True
         self.age = 0
 
@@ -154,13 +152,7 @@ class ClockBacterium(Bacterium):
         return ClockBacterium.eta
 
     def propagate(self, lattice, t, dt, d):
-        if self.is_frontier:
-            dy = ClockBacterium.NasA_oscIII_D(t=t, y=self.y[t - 1])
-        else:
-            dy = ClockBacterium.NasA_oscIII_eta(t=t, y=self.y[t - 1])
-        dy[5] += lattice.diffuse(i=t, cell=d, idx=5)
-        dy[7] += lattice.diffuse(i=t, cell=d, idx=7)
-        self.y[t] = self.y[t - 1] + dt * dy
+        return
 
     @staticmethod
     def _deltas(y):
@@ -179,8 +171,8 @@ class ClockBacterium(Bacterium):
     @staticmethod
     def NasA_oscIII_D(t, y):
         dy = ClockBacterium._deltas(y=y)
-        dy[: -1] *= ClockBacterium.epsilon
-        return dy
+        dy *= ClockBacterium.epsilon
+        return dy[: -1]
 
     @staticmethod
     def NasA_oscIII_eta(t, y):
@@ -188,7 +180,7 @@ class ClockBacterium(Bacterium):
         dy[: -1] *= (ClockBacterium.epsilon / (1.0 + y[9]))
         return dy
 
-    def draw(self, t, min_val, max_val):
+    def draw(self, val, min_val, max_val):
         import matplotlib.pyplot as plt
-        c = plt.cm.Greens((self.y[t, 8] - min_val) / (max_val - min_val))
+        c = plt.cm.Greens((val - min_val) / (max_val - min_val))
         return c[0] * 255.0, c[1] * 255.0, c[2] * 255.0
