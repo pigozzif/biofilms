@@ -250,28 +250,14 @@ class ClockLattice(Lattice):
             if d["cell"] is not None:
                 d["cell"].age += 1
 
-    def _correct_age(self):
-        for _, d in self._lattice.nodes(data=True):
-            if d["cell"] is None:
-                continue
-            elif d["cell"].age == 1:
-                d["cell"].age = self.max_t
-
     def set_params(self, params):
         ClockBacterium.alpha_e = params[0]
         ClockBacterium.alpha_o = params[1]
-
-    def _sols2cells(self):
-        for _, d in self._lattice.nodes(data=True):
-            if d["cell"] is None:
-                continue
-            d["cell"].y = self.sols[len(self.sols) - self.max_t + d["cell"].age - 1].y
 
     def solve(self, dt):
         for i in range(self.max_t):
             self._grow(i=i)
             self._update_ages()
-        # self._correct_age()
         sol_frontier = solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
                                  t_span=[0.0, self.max_t * self.dt],
                                  t_eval=[i * self.dt for i in range(self.max_t)],
@@ -285,7 +271,6 @@ class ClockLattice(Lattice):
             self.sols.append(sol)
             if sol.y.shape[1] != self.max_t - i - 1:
                 raise RuntimeError("Integration failed at step {0}: {1}".format(i, sol.y.shape))
-        # self._sols2cells()
 
     def _draw_cell(self, val, image, d, min_val, max_val):
         cv2.rectangle(image,
