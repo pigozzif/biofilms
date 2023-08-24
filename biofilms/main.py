@@ -71,21 +71,28 @@ def set_params(params):
     ClockBacterium.alpha_o = params[1]
 
 
-def integrate_lattice(dt, max_t):
-    return solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
-                     t_span=[0.0, max_t * dt],
-                     t_eval=[i * dt for i in range(max_t)],
-                     y0=ClockLattice.init_conditions)
+def integrate_lattice(num_actions, num_params, solution, dt, max_t):
+    policies = []
+    for i in range(num_actions):
+        set_params(params=solution[i * num_params: (i + 1) * num_params])
+        policies.append(solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
+                        t_span=[0.0, max_t * dt],
+                        t_eval=[i * dt for i in range(max_t)],
+                        y0=ClockLattice.init_conditions))
+    return policies
 
 
 def simulation(config, solution, video_name):
     env = gym.make("BipedalWalker-v3")
     _ = env.reset()
     fitness = 0.0
-    set_params(params=solution)
-    policy = integrate_lattice(dt=config.dt, max_t=env.spec.max_episode_steps)
+    policies = integrate_lattice(num_actions=env.action_space.shape[0],
+                                 num_params=config.n_params,
+                                 solution=solution,
+                                 dt=config.dt,
+                                 max_t=env.spec.max_episode_steps)
     for t in range(env.spec.max_episode_steps):
-        action = np.repeat(policy.y[8, t], env.action_space.shape[0])
+        action = [policy.y[8, t] for policy in policies]
         observation, reward, done, _ = env.step(action)
         fitness += reward
         if done:
@@ -128,5 +135,4 @@ if __name__ == "__main__":
     # best = [float(x) for x in open(FileListener.get_log_file_name(file_name), "r").readlines()[-1].split(";")[-1].strip().strip("[]").
     #         split(" ")[1:]]
     # orig: [20000, 100000], uneven: [90000, 100000], one: [100000, 800000]
-    print(simulation(config=args, solution=[20000, 100000],
-                     video_name="random.mp4"))  # ".".join([file_name, "video", "mp4"])))
+    print(simulation(config=args, solution=[20000, 100000] * 4, video_name=None))  # ".".join([file_name, "video", "mp4"])))
