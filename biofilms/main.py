@@ -1,10 +1,11 @@
 import argparse
+import os
 from multiprocessing import Pool
 import random
 import time
 import logging
 
-from bacteria.lattice import Lattice, ClockLattice
+from bacteria.lattice import ClockLattice
 
 import numpy as np
 import gym
@@ -12,18 +13,20 @@ from scipy.integrate import solve_ivp
 
 # import matplotlib.pyplot as plt
 from bacteria.bacterium import ClockBacterium
+from evo.evolution.algorithms import StochasticSolver
+from evo.evolution.objectives import ObjectiveDict
+from evo.listeners.listener import FileListener
 
 
 def parse_args():
     parser = argparse.ArgumentParser(prog="BiofilmSimulation", description="Simulate a B. subtilis biofilm")
     parser.add_argument("--s", type=int, default=0, help="seed")
     parser.add_argument("--dt", type=float, default=0.3, help="integration step")
-    parser.add_argument("--t", type=int, default=200, help="max simulation steps")
     parser.add_argument("--p", type=str, default="clock", help="problem")
-    parser.add_argument("--np", type=int, default=1, help="parallel optimization processes")
-    parser.add_argument("--solver", type=str, default="afpo", help="solver")
-    parser.add_argument("--n_params", type=int, default=2, help="solution size")
-    parser.add_argument("--evals", type=int, default=2500, help="fitness evaluations")
+    parser.add_argument("--np", type=int, default=6, help="parallel optimization processes")
+    parser.add_argument("--solver", type=str, default="cmaes", help="solver")
+    parser.add_argument("--n_params", type=int, default=4, help="solution size")
+    parser.add_argument("--evals", type=int, default=30000, help="fitness evaluations")
     return parser.parse_args()
 
 
@@ -50,7 +53,7 @@ def parallel_solve(solver, config, listener):
             logging.warning("fitness at iteration {}: {}".format(j + 1, result[1]))
         listener.listen(**{"iteration": j, "elapsed.sec": time.time() - start_time,
                            "evaluations": evaluated, "best.fitness": result[1],
-                           "best.solution": result[0]})
+                           "best.solution": "/".join([str(x) for x in result[0]])})
         if result[1] >= best_fitness or best_result is None:
             best_result = result[0]
             best_fitness = result[1]
@@ -60,10 +63,9 @@ def parallel_solve(solver, config, listener):
 
 
 def parallel_wrapper(arg):
-    c, solution, i, video_name = arg
-    fitness = simulation(config=c, solution=solution, video_name=video_name)
-    print(i)
-    return i, -fitness
+    c, solution, i = arg
+    fitness = simulation(config=c, solution=solution)
+    return i, fitness
 
 
 def set_params(params):
@@ -76,29 +78,43 @@ def integrate_lattice(num_actions, num_params, solution, dt, max_t):
     for i in range(num_actions):
         set_params(params=solution[i * num_params: (i + 1) * num_params])
         policies.append(solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
-                        t_span=[0.0, max_t * dt],
-                        t_eval=[i * dt for i in range(max_t)],
-                        y0=ClockLattice.init_conditions))
+                                  t_span=[0.0, max_t * dt],
+                                  t_eval=[i * dt for i in range(max_t)],
+                                  y0=ClockLattice.init_conditions))
     return policies
 
 
-def simulation(config, solution, video_name):
+def sinusoidal_wave(num_actions, num_params, solution, max_t):
+    policies = []
+    for i in range(num_actions):
+        params = solution[i * num_params: (i + 1) * num_params]
+        policies.append(params[0] * np.sin(2 * np.pi * params[1] * np.arange(max_t) + params[2]) + params[3])
+    return policies
+
+
+def simulation(config, solution, render=False):
     env = gym.make("BipedalWalker-v3")
+    env.seed(config.s)
     _ = env.reset()
     fitness = 0.0
-    policies = integrate_lattice(num_actions=env.action_space.shape[0],
-                                 num_params=config.n_params,
-                                 solution=solution,
-                                 dt=config.dt,
-                                 max_t=env.spec.max_episode_steps)
+    # policies = integrate_lattice(num_actions=env.action_space.shape[0],
+    #                             num_params=config.n_params,
+    #                             solution=solution,
+    #                             dt=config.dt,
+    #                             max_t=env.spec.max_episode_steps)
+    policies = sinusoidal_wave(num_actions=env.action_space.shape[0],
+                               num_params=config.n_params // env.action_space.shape[0],
+                               solution=solution,
+                               max_t=env.spec.max_episode_steps)
     for t in range(env.spec.max_episode_steps):
-        action = [policy.y[8, t] for policy in policies]
+        action = [policy[t] for policy in policies]
         observation, reward, done, _ = env.step(action)
         fitness += reward
         if done:
             _ = env.reset()
             break
-        env.render()
+        if render:
+            env.render()
     env.close()
     # if video_name is not None:
     #     policy.render(video_name=video_name)
@@ -107,32 +123,30 @@ def simulation(config, solution, video_name):
 
 if __name__ == "__main__":
     args = parse_args()
+    file_name = os.path.join("output", ".".join([args.solver, str(args.s), "txt"]))
+    objectives_dict = ObjectiveDict()
+    objectives_dict.add_objective(name="fitness", maximize=True, best_value=300.0, worst_value=-100)
+    listener = FileListener(file_name=file_name, header=["iteration", "elapsed.sec", "evaluations", "best.fitness",
+                                                         "best.solution"])
+    args.n_params *= 4
+    solver = StochasticSolver.create_solver(name=args.solver,
+                                            seed=args.s,
+                                            num_params=args.n_params,
+                                            pop_size=100,
+                                            genotype_factory="uniform_float",
+                                            objectives_dict=objectives_dict,
+                                            offspring_size=100,
+                                            remap=False,
+                                            genetic_operators={"gaussian_mut": 1.0},
+                                            genotype_filter=None,
+                                            tournament_size=5,
+                                            mu=0.0,
+                                            sigma=0.2,
+                                            n=args.n_params,
+                                            range=(-1, 1))
     set_seed(args.s)
-    # file_name = ".".join([args.solver, str(args.s), "txt"])
-    # objectives_dict = ObjectiveDict()
-    # objectives_dict.add_objective(name="fitness", maximize=False, best_value=0.0, worst_value=5.0)
-    # listener = FileListener(file_name=file_name, header=["iteration", "elapsed.sec", "evaluations", "best.fitness",
-    #                                                      "best.solution"])
-    # solver = StochasticSolver.create_solver(name=args.solver,
-    #                                         seed=args.s,
-    #                                         num_params=args.n_params,
-    #                                         pop_size=100,
-    #                                         genotype_factory="uniform_float",
-    #                                         objectives_dict=objectives_dict,
-    #                                         offspring_size=100,
-    #                                         remap=False,
-    #                                         genetic_operators={"gaussian_mut": 1.0},
-    #                                         genotype_filter=None,
-    #                                         tournament_size=5,
-    #                                         mu=0.0,
-    #                                         sigma=5000,
-    #                                         n=args.n_params,
-    #                                         range=(0, 1000000),
-    #                                         upper=1000000,
-    #                                         lower=0)
-    # best = parallel_solve(solver=solver, config=args, listener=listener)
-    # logging.warning("fitness score at this local optimum: {}".format(best[1]))
-    # best = [float(x) for x in open(FileListener.get_log_file_name(file_name), "r").readlines()[-1].split(";")[-1].strip().strip("[]").
-    #         split(" ")[1:]]
+    best = parallel_solve(solver=solver, config=args, listener=listener)
+    logging.warning("fitness score at this local optimum: {}".format(best[1]))
+    # best = [float(x) for x in open(file_name, "r").readlines()[-1].split(";")[-1].strip().split("/")]
     # orig: [20000, 100000], uneven: [90000, 100000], one: [100000, 800000]
-    print(simulation(config=args, solution=[20000, 100000] * 4, video_name=None))  # ".".join([file_name, "video", "mp4"])))
+    print(simulation(config=args, solution=best[0] if isinstance(tuple, best) else best, render=True))
