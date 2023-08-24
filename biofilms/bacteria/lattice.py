@@ -1,7 +1,6 @@
 import abc
 import math
 import os
-import random
 
 import numpy as np
 import cv2
@@ -173,8 +172,7 @@ class SignallingLattice(Lattice):
 
 class ClockLattice(Lattice):
     D = 0.5
-    init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1,
-                       0.0]
+    init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1, 0.0]
 
     def __init__(self, w, h, dt, max_t, task):
         super().__init__(w, h, dt, max_t, lambda x, y: (x == h // 2 and y == w // 2))
@@ -229,7 +227,7 @@ class ClockLattice(Lattice):
                                for n in self.get_neighborhood(cell=cell) if n["cell"] is not None])
 
     def _select_parent(self, cell):
-        return random.choice([d for d in self.get_neighborhood(cell=cell) if d["cell"] is not None])
+        return min([d for d in self.get_neighborhood(cell=cell) if d["cell"] is not None], key=lambda x: x["cell"].age)
 
     def _metabolize(self, i):
         for _, d in self._lattice.nodes(data=True):
