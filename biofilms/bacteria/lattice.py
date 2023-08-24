@@ -71,7 +71,7 @@ class Lattice(abc.ABC):
         if name == "signalling":
             return SignallingLattice(kwargs["w"], kwargs["h"], kwargs["dt"], kwargs["max_t"], kwargs["phi_c"])
         elif name == "clock":
-            return ClockLattice(kwargs["w"], kwargs["h"], kwargs["dt"], kwargs["max_t"], kwargs["task"])
+            return ClockLattice(kwargs["w"], kwargs["h"], kwargs["dt"], kwargs["max_t"])
         raise ValueError("Invalid lattice name: {}".format(name))
 
 
@@ -179,15 +179,16 @@ class ClockLattice(Lattice):
 
     def __init__(self, w, h, dt, max_t):
         super().__init__(w, h, dt, max_t, lambda x, y: (x == h // 2 and y == w // 2))
-        self._connect_square_lattice()
+        # self._connect_square_lattice()
         self.dt = dt
         self.sol_frontier = None
-        self.frontier = [d for _, d in self._lattice.nodes(data=True)
-                         if d["cell"] is not None and d["cell"].is_frontier]
-        self.seed = [f for f in self.frontier]  # TODO: BE CAREFUL WITH MORE COMPLEX SEEDS
-        self._update_distances()
+        # self.frontier = [d for _, d in self._lattice.nodes(data=True)
+        #                  if d["cell"] is not None and d["cell"].is_frontier]
+        # self.seed = [f for f in self.frontier]  # TODO: BE CAREFUL WITH MORE COMPLEX SEEDS
+        # self._update_distances()
 
     def init_lattice(self, *args):
+        return
         lattice = nx.Graph()
         i = 0
         for row in range(self.h):
@@ -248,9 +249,9 @@ class ClockLattice(Lattice):
         ClockBacterium.alpha_o = params[1]
 
     def solve(self, dt):
-        for i in range(self.max_t):
-            self._grow(i=i)
-            self._update_ages()
+        # for i in range(self.max_t):
+        #     self._grow(i=i)
+        #     self._update_ages()
         self.sol_frontier = solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
                                       t_span=[0.0, self.max_t * self.dt],
                                       t_eval=[i * self.dt for i in range(self.max_t)],
@@ -296,11 +297,4 @@ class ClockLattice(Lattice):
             renderer.write(image)
 
     def get_fitness(self):
-        target = np.load(os.path.join("targets", self.task + ".npy"))
-        prediction = np.zeros_like(target)
-        for node, d in self._lattice.nodes(data=True):
-            if d["cell"] is None or self.max_t - 1 not in d["vars"]:
-                continue
-            prediction[d["row"], d["col"]] = d["vars"][self.max_t - 1][8]
-        # np.save("targets/one.npy", prediction)
-        return np.sqrt(np.concatenate(np.square(prediction - target)).sum())
+        raise NotImplementedError

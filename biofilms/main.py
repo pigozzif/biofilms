@@ -4,10 +4,14 @@ import random
 import time
 import logging
 
-from bacteria.lattice import Lattice
+from bacteria.lattice import Lattice, ClockLattice
 
 import numpy as np
+import gym
+from scipy.integrate import solve_ivp
+
 # import matplotlib.pyplot as plt
+from bacteria.bacterium import ClockBacterium
 
 
 def parse_args():
@@ -62,23 +66,35 @@ def parallel_wrapper(arg):
     return i, -fitness
 
 
+def integrate_lattice(dt, max_t):
+    return solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
+                     t_span=[0.0, max_t * dt],
+                     t_eval=[i * dt for i in range(max_t)],
+                     y0=ClockLattice.init_conditions)
+
+
 def simulation(config, solution, video_name):
-    world = Lattice.create_lattice(name=config.p, w=config.w, h=config.h, dt=config.dt, max_t=config.t)
-    world.set_params(params=solution)
-    world.solve(dt=config.dt)
-    if video_name is not None:
-        world.render(video_name=video_name)
-    # fitness = world.get_fitness()
-    return 0.0  # fitness
+    env = gym.make("BipedalWalker-v3")
+    _ = env.reset()
+    fitness = 0.0
+    policy = integrate_lattice(dt=config.dt, max_t=env.spec.max_episode_steps)
+    for t in range(env.spec.max_episode_steps):
+        action = np.repeat(policy.y[8, t], env.action_space.shape[0])
+        observation, reward, done, _ = env.step(action)
+        fitness += reward
+        if done:
+            _ = env.reset()
+            break
+        env.render()
+    env.close()
+    # if video_name is not None:
+    #     policy.render(video_name=video_name)
+    return fitness
 
 
 if __name__ == "__main__":
     args = parse_args()
-    args.w = args.t * 2 + 1
-    args.h = args.t * 2 + 1
     set_seed(args.s)
-    # sample_fitness_landscape(config=args, num_workers=args.np)
-    # make_arras(".")
     # file_name = ".".join([args.solver, str(args.s), "txt"])
     # objectives_dict = ObjectiveDict()
     # objectives_dict.add_objective(name="fitness", maximize=False, best_value=0.0, worst_value=5.0)
@@ -106,4 +122,5 @@ if __name__ == "__main__":
     # best = [float(x) for x in open(FileListener.get_log_file_name(file_name), "r").readlines()[-1].split(";")[-1].strip().strip("[]").
     #         split(" ")[1:]]
     # orig: [20000, 100000], uneven: [90000, 100000], one: [100000, 800000]
-    print(simulation(config=args, solution=[20000, 100000], video_name="random.mp4"))  # ".".join([file_name, "video", "mp4"])))
+    print(simulation(config=args, solution=[20000, 100000],
+                     video_name="random.mp4"))  # ".".join([file_name, "video", "mp4"])))
