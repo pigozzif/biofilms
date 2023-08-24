@@ -66,6 +66,11 @@ def parallel_wrapper(arg):
     return i, -fitness
 
 
+def set_params(params):
+    ClockBacterium.alpha_e = params[0]
+    ClockBacterium.alpha_o = params[1]
+
+
 def integrate_lattice(dt, max_t):
     return solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
                      t_span=[0.0, max_t * dt],
@@ -77,6 +82,7 @@ def simulation(config, solution, video_name):
     env = gym.make("BipedalWalker-v3")
     _ = env.reset()
     fitness = 0.0
+    set_params(params=solution)
     policy = integrate_lattice(dt=config.dt, max_t=env.spec.max_episode_steps)
     for t in range(env.spec.max_episode_steps):
         action = np.repeat(policy.y[8, t], env.action_space.shape[0])
