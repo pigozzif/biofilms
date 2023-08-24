@@ -10,6 +10,8 @@ from scipy.integrate import solve_ivp
 
 from bacteria.bacterium import SignallingBacterium, ClockBacterium
 
+import matplotlib.pyplot as plt
+
 
 class Lattice(abc.ABC):
     cell_height = 1.0
@@ -175,12 +177,11 @@ class ClockLattice(Lattice):
     D = 0.5
     init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1]
 
-    def __init__(self, w, h, dt, max_t, task):
+    def __init__(self, w, h, dt, max_t):
         super().__init__(w, h, dt, max_t, lambda x, y: (x == h // 2 and y == w // 2))
         self._connect_square_lattice()
         self.dt = dt
-        self.task = task
-        self.sols = []
+        self.sol_frontier = None
         self.frontier = [d for _, d in self._lattice.nodes(data=True)
                          if d["cell"] is not None and d["cell"].is_frontier]
         self.seed = [f for f in self.frontier]  # TODO: BE CAREFUL WITH MORE COMPLEX SEEDS
@@ -225,14 +226,6 @@ class ClockLattice(Lattice):
         return - self.D * sum([cell["cell"].y[i - 1, idx] - n["cell"].y[i - 1, idx]
                                for n in self.get_neighborhood(cell=cell) if n["cell"] is not None])
 
-    def _select_parent(self, cell):
-        return random.choice([d for d in self.get_neighborhood(cell=cell) if d["cell"] is not None])
-
-    def _metabolize(self, i):
-        for _, d in self._lattice.nodes(data=True):
-            if d["cell"] is not None:
-                d["cell"].propagate(lattice=self, t=i, dt=self.dt, d=d)
-
     def _grow(self, i):
         n_f = len(self.frontier)
         for node, d in self._lattice.nodes(data=True):
@@ -258,19 +251,10 @@ class ClockLattice(Lattice):
         for i in range(self.max_t):
             self._grow(i=i)
             self._update_ages()
-        sol_frontier = solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
-                                 t_span=[0.0, self.max_t * self.dt],
-                                 t_eval=[i * self.dt for i in range(self.max_t)],
-                                 y0=self.init_conditions)
-        self.sols.append(sol_frontier)
-        for i in range(self.max_t - 1):
-            sol = solve_ivp(fun=ClockBacterium.NasA_oscIII_eta,
-                            t_span=[0.0, (self.max_t - i - 1) * self.dt],
-                            t_eval=[j * self.dt for j in range(self.max_t - i - 1)],
-                            y0=np.concatenate((sol_frontier.y[:, i + 1], np.zeros(1))))
-            self.sols.append(sol)
-            if sol.y.shape[1] != self.max_t - i - 1:
-                raise RuntimeError("Integration failed at step {0}: {1}".format(i, sol.y.shape))
+        self.sol_frontier = solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
+                                      t_span=[0.0, self.max_t * self.dt],
+                                      t_eval=[i * self.dt for i in range(self.max_t)],
+                                      y0=self.init_conditions)
 
     def _draw_cell(self, val, image, d, min_val, max_val):
         cv2.rectangle(image,
@@ -285,19 +269,16 @@ class ClockLattice(Lattice):
         image = self._fill_canvas()
         fourcc = cv2.VideoWriter_fourcc(*'MP4V')
         renderer = cv2.VideoWriter(video_name, fourcc, 20, (image.shape[1], image.shape[0]))
-        min_val = min([np.min(sol.y[8, :]) for sol in self.sols])
-        max_val = max([np.max(sol.y[8, :]) for sol in self.sols])
+        min_val = np.min(self.sol_frontier.y[8, :])
+        max_val = np.max(self.sol_frontier.y[8, :])
         for i in range(self.max_t):
             for _, d in self._lattice.nodes(data=True):
-                if d["cell"] is None or d["cell"].age < self.max_t - i:
+                if d["cell"] is None:
                     continue
                 diff = self.max_t - d["cell"].age
                 if diff == i:
-                    val = self.sols[0].y[8, i]
-                else:
-                    sol = self.sols[diff]
-                    val = sol.y[8, i - (self.max_t - sol.y.shape[1])]
-                self._draw_cell(val=val, image=image, d=d, min_val=min_val, max_val=max_val)
+                    val = self.sol_frontier.y[8, i]
+                    self._draw_cell(val=val, image=image, d=d, min_val=min_val, max_val=max_val)
             cv2.putText(image,
                         text="Min response: {}".format(round(min_val, 3)),
                         org=(int((self.w - 50) * self.magnify), int(10 * self.magnify)),
