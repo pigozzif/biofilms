@@ -22,11 +22,12 @@ def parse_args():
     parser = argparse.ArgumentParser(prog="BiofilmSimulation", description="Simulate a B. subtilis biofilm")
     parser.add_argument("--s", type=int, default=0, help="seed")
     parser.add_argument("--dt", type=float, default=0.3, help="integration step")
-    parser.add_argument("--p", type=str, default="clock", help="problem")
-    parser.add_argument("--np", type=int, default=6, help="parallel optimization processes")
-    parser.add_argument("--solver", type=str, default="cmaes", help="solver")
+    parser.add_argument("--policy", type=str, default="sin", help="problem")
+    parser.add_argument("--np", type=int, default=7, help="parallel optimization processes")
+    parser.add_argument("--solver", type=str, default="afpo", help="solver")
     parser.add_argument("--n_params", type=int, default=4, help="solution size")
     parser.add_argument("--evals", type=int, default=30000, help="fitness evaluations")
+    parser.add_argument("--mode", type=str, default="test", help="modality")
     return parser.parse_args()
 
 
@@ -97,15 +98,17 @@ def simulation(config, solution, render=False):
     env.seed(config.s)
     _ = env.reset()
     fitness = 0.0
-    # policies = integrate_lattice(num_actions=env.action_space.shape[0],
-    #                             num_params=config.n_params,
-    #                             solution=solution,
-    #                             dt=config.dt,
-    #                             max_t=env.spec.max_episode_steps)
-    policies = sinusoidal_wave(num_actions=env.action_space.shape[0],
-                               num_params=config.n_params // env.action_space.shape[0],
-                               solution=solution,
-                               max_t=env.spec.max_episode_steps)
+    if config.policy == "sin":
+        policies = sinusoidal_wave(num_actions=env.action_space.shape[0],
+                                   num_params=config.n_params // env.action_space.shape[0],
+                                   solution=solution,
+                                   max_t=env.spec.max_episode_steps)
+    else:
+        policies = integrate_lattice(num_actions=env.action_space.shape[0],
+                                     num_params=config.n_params // env.action_space.shape[0],
+                                     solution=solution,
+                                     dt=config.dt,
+                                     max_t=env.spec.max_episode_steps)
     for t in range(env.spec.max_episode_steps):
         action = [policy[t] for policy in policies]
         observation, reward, done, _ = env.step(action)
@@ -123,30 +126,32 @@ def simulation(config, solution, render=False):
 
 if __name__ == "__main__":
     args = parse_args()
-    file_name = os.path.join("output", ".".join([args.solver, str(args.s), "txt"]))
-    objectives_dict = ObjectiveDict()
-    objectives_dict.add_objective(name="fitness", maximize=True, best_value=300.0, worst_value=-100)
-    listener = FileListener(file_name=file_name, header=["iteration", "elapsed.sec", "evaluations", "best.fitness",
-                                                         "best.solution"])
-    args.n_params *= 4
-    solver = StochasticSolver.create_solver(name=args.solver,
-                                            seed=args.s,
-                                            num_params=args.n_params,
-                                            pop_size=100,
-                                            genotype_factory="uniform_float",
-                                            objectives_dict=objectives_dict,
-                                            offspring_size=100,
-                                            remap=False,
-                                            genetic_operators={"gaussian_mut": 1.0},
-                                            genotype_filter=None,
-                                            tournament_size=5,
-                                            mu=0.0,
-                                            sigma=0.2,
-                                            n=args.n_params,
-                                            range=(-1, 1))
     set_seed(args.s)
-    best = parallel_solve(solver=solver, config=args, listener=listener)
-    logging.warning("fitness score at this local optimum: {}".format(best[1]))
-    # best = [float(x) for x in open(file_name, "r").readlines()[-1].split(";")[-1].strip().split("/")]
+    file_name = os.path.join("output", ".".join([args.solver, str(args.s), "txt"]))
+    args.n_params *= 4
+    if args.mode == "opt":
+        objectives_dict = ObjectiveDict()
+        objectives_dict.add_objective(name="fitness", maximize=True, best_value=300.0, worst_value=-100)
+        listener = FileListener(file_name=file_name, header=["iteration", "elapsed.sec", "evaluations", "best.fitness",
+                                                             "best.solution"])
+        solver = StochasticSolver.create_solver(name=args.solver,
+                                                seed=args.s,
+                                                num_params=args.n_params,
+                                                pop_size=100,
+                                                genotype_factory="uniform_float",
+                                                objectives_dict=objectives_dict,
+                                                offspring_size=100,
+                                                remap=False,
+                                                genetic_operators={"gaussian_mut": 1.0},
+                                                genotype_filter=None,
+                                                tournament_size=5,
+                                                mu=0.0,
+                                                sigma=0.1,
+                                                n=args.n_params,
+                                                range=(-1, 1))
+        best = parallel_solve(solver=solver, config=args, listener=listener)
+        logging.warning("fitness score at this local optimum: {}".format(best[1]))
+    else:
+        best = [float(x) for x in open(file_name, "r").readlines()[-1].split(";")[-1].strip().split("/")]
     # orig: [20000, 100000], uneven: [90000, 100000], one: [100000, 800000]
-    print(simulation(config=args, solution=best[0] if isinstance(tuple, best) else best, render=True))
+    print(simulation(config=args, solution=best[0] if isinstance(best, tuple) else best, render=True))
