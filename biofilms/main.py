@@ -22,12 +22,12 @@ def parse_args():
     parser = argparse.ArgumentParser(prog="BiofilmSimulation", description="Simulate a B. subtilis biofilm")
     parser.add_argument("--s", type=int, default=0, help="seed")
     parser.add_argument("--dt", type=float, default=0.3, help="integration step")
-    parser.add_argument("--policy", type=str, default="sin", help="problem")
+    parser.add_argument("--policy", type=str, default="bact", help="problem")
     parser.add_argument("--np", type=int, default=7, help="parallel optimization processes")
     parser.add_argument("--solver", type=str, default="afpo", help="solver")
-    parser.add_argument("--n_params", type=int, default=4, help="solution size")
+    parser.add_argument("--n_params", type=int, default=4, help="action space size")
     parser.add_argument("--evals", type=int, default=30000, help="fitness evaluations")
-    parser.add_argument("--mode", type=str, default="test", help="modality")
+    parser.add_argument("--mode", type=str, default="opt", help="modality")
     return parser.parse_args()
 
 
@@ -76,12 +76,13 @@ def set_params(params):
 
 def integrate_lattice(num_actions, num_params, solution, dt, max_t):
     policies = []
+    solution = np.clip(solution, a_min=0.0, a_max=None)
     for i in range(num_actions):
         set_params(params=solution[i * num_params: (i + 1) * num_params])
         policies.append(solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
                                   t_span=[0.0, max_t * dt],
                                   t_eval=[i * dt for i in range(max_t)],
-                                  y0=ClockLattice.init_conditions))
+                                  y0=ClockLattice.init_conditions).y[8])
     return policies
 
 
@@ -95,6 +96,8 @@ def sinusoidal_wave(num_actions, num_params, solution, max_t):
 
 def simulation(config, solution, render=False):
     env = gym.make("BipedalWalker-v3")
+    if render:
+        env = gym.wrappers.Monitor(env, "videos", force=True)
     env.seed(config.s)
     _ = env.reset()
     fitness = 0.0
@@ -127,8 +130,8 @@ def simulation(config, solution, render=False):
 if __name__ == "__main__":
     args = parse_args()
     set_seed(args.s)
-    file_name = os.path.join("output", ".".join([args.solver, str(args.s), "txt"]))
-    args.n_params *= 4
+    file_name = os.path.join("output", ".".join([args.policy, args.solver, str(args.s), "txt"]))
+    args.n_params *= 4 if args.policy == "sin" else 2
     if args.mode == "opt":
         objectives_dict = ObjectiveDict()
         objectives_dict.add_objective(name="fitness", maximize=True, best_value=300.0, worst_value=-100)
@@ -146,9 +149,9 @@ if __name__ == "__main__":
                                                 genotype_filter=None,
                                                 tournament_size=5,
                                                 mu=0.0,
-                                                sigma=0.1,
+                                                sigma=20000,
                                                 n=args.n_params,
-                                                range=(-1, 1))
+                                                range=(0, 200000))
         best = parallel_solve(solver=solver, config=args, listener=listener)
         logging.warning("fitness score at this local optimum: {}".format(best[1]))
     else:
