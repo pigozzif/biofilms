@@ -79,8 +79,8 @@ class SignalingLattice(Lattice):
     def __init__(self, w, h, dt, max_t, phi_c):
         super().__init__(w, h, dt, max_t, lambda x, y: x % 2 == 0, phi_c)
         self._connect_triangular_lattice()
-        self._init_conditions = [1.0 if d["col"] == 0 else 0.0 for _, d in self._lattice.nodes(data=True)
-                                 if d["cell"] is not None]
+        self.init_conditions = [1.0 if d["col"] <= 1 else 0.0 for _, d in self._lattice.nodes(data=True)
+                                if d["cell"] is not None]
         self.sol = None
 
     def init_lattice(self, phi_c):
@@ -88,7 +88,7 @@ class SignalingLattice(Lattice):
         i = 0
         for row in range(self.h):
             for col in range(self.w):
-                cell = SignalingBacterium(idx=i, u_init=1.0 if col == 0 else 0.0, phi_c=phi_c)
+                cell = SignalingBacterium(idx=i)
                 if self.is_init_cell(row, col):
                     lattice.add_node(i, i=i, cell=cell, row=row, col=col * 2,
                                      cx=col * self.cell_width + self.cell_width / 2.0,
@@ -130,40 +130,38 @@ class SignalingLattice(Lattice):
     def set_params(self, params):
         return
 
-    def _get_coupling(self, i, j):
-        return 0.5 if j == i + 2 * self.w or j == i - 2 * self.w else 0.25
+    def get_coupling(self, i, j):
+        return 0.5 if j == i + 1 or j == i - 1 else 0.25
 
-    def propagate(self, t, y, dt):
-        dy = []
-        for node, d in self._lattice.nodes(data=True):
-            if d["cell"] is not None:
-                dy.append(d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self, dt=dt))
+    def _propagate(self, t, y):
+        dy = np.array([d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self, dt=self.dt)
+                       for _, d in self._lattice.nodes(data=True)])
         return dy
 
     def solve(self, dt):
-        self.sol = solve_ivp(fun=self.propagate,
+        self.sol = solve_ivp(fun=self._propagate,
                              t_span=[0.0, self.max_t * self.dt],
                              t_eval=[i * self.dt for i in range(self.max_t)],
-                             y0=self._init_conditions,
-                             args=[dt])
+                             y0=self.init_conditions)
         if self.sol.y.shape[1] != self.max_t:
             raise RuntimeError("Integration failed: {}".format(self.sol.y.shape))
+        for _, d in self._lattice.nodes(data=True):
+            d["cell"].us.append(self.sol.y[d["i"], -1])
 
-    def _draw_cell(self, image, d, c):
+    def _draw_cell(self, image, d, c, t):
         cv2.ellipse(image, (int(d["cx"] * self.magnify), int(d["cy"] * self.magnify)),
                     axes=(int(self.cell_width * self.magnify - self.magnify),
                           int(self.cell_height * self.magnify - self.magnify / 2)),
-                    angle=0.0, startAngle=0.0, endAngle=360.0, color=c, thickness=-1)
+                    angle=0.0, startAngle=0.0, endAngle=360.0, color=c * 255, thickness=-1)
 
     def render(self, video_name):
         image = self._fill_canvas()
         fourcc = cv2.VideoWriter_fourcc(*'MP4V')
         renderer = cv2.VideoWriter(video_name, fourcc, 20, (image.shape[1], image.shape[0]))
-        for i in range(self.max_t):
+        print(self.sol.y.min(), self.sol.y.max())
+        for t in range(self.max_t - 1):
             for _, d in self._lattice.nodes(data=True):
-                if d["cell"] is None:
-                    continue
-                self._draw_cell(image=image, d=d, c=self.sol.y[d["i"], i])
+                self._draw_cell(image=image, d=d, c=self.sol.y[d["i"], t], t=t)
             renderer.write(image)
 
     def get_fitness(self):

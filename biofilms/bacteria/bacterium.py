@@ -23,17 +23,13 @@ class SignalingBacterium(Bacterium):
     u0 = 0.02
     firing_threshold = 0.6
 
-    def __init__(self, idx, u_init, phi_c):
+    def __init__(self, idx):
         super().__init__(idx)
-        # self.ut = u_init
-        self.u_old = u_init
-        # self.firing = random.random() <= phi_c[0]
-        # self.ut = 1.0 if self.firing else 0.0
         self.integral = 0.0
         self.us = []
 
     def _is_firing(self, ut):
-        return ut > self.firing_threshold
+        return ut > self.u0  # self.firing_threshold
 
     def _compute_t_prime(self):
         return self.us[-1]
@@ -62,7 +58,7 @@ class SignalingBacterium(Bacterium):
         self.us.append(y[self.idx])
         tau = 300 if self._is_firing(ut=y[self.idx]) else 5
         self.integral += quad(lambda x: self._compute_t_prime(), t - dt, t)[0]
-        messages = sum([lattice._get_coupling(self.idx, neigh["cell"].idx) * (y[neigh["cell"].idx] - y[self.idx])
+        messages = sum([lattice.get_coupling(self.idx, neigh["cell"].idx) * (y[neigh["cell"].idx] - y[self.idx])
                         for neigh in lattice.get_neighborhood(self.idx)])
         dy = self.epsilon * (y[self.idx] * (1 - y[self.idx]) * (y[self.idx] - self.u0) - self.integral / tau) + messages
         return dy
