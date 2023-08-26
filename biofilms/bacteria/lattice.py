@@ -247,9 +247,9 @@ class ClockLattice(Lattice):
         ClockBacterium.alpha_o = params[1]
 
     def solve(self, dt):
-        # for i in range(self.max_t):
-        #     self._grow(i=i)
-        #     self._update_ages()
+        for i in range(self.max_t):
+            self._grow(i=i)
+            self._update_ages()
         self.sol_frontier = solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
                                       t_span=[0.0, self.max_t * self.dt],
                                       t_eval=[i * self.dt for i in range(self.max_t)],

@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 from multiprocessing import Pool
 import random
@@ -11,7 +12,6 @@ import numpy as np
 import gym
 from scipy.integrate import solve_ivp
 
-# import matplotlib.pyplot as plt
 from bacteria.bacterium import ClockBacterium
 from evo.evolution.algorithms import StochasticSolver
 from evo.evolution.objectives import ObjectiveDict
@@ -25,9 +25,9 @@ def parse_args():
     parser.add_argument("--policy", type=str, default="bact", help="problem")
     parser.add_argument("--np", type=int, default=7, help="parallel optimization processes")
     parser.add_argument("--solver", type=str, default="afpo", help="solver")
-    parser.add_argument("--n_params", type=int, default=4, help="action space size")
+    parser.add_argument("--n_params", type=int, default=1, help="action space size")
     parser.add_argument("--evals", type=int, default=30000, help="fitness evaluations")
-    parser.add_argument("--mode", type=str, default="opt", help="modality")
+    parser.add_argument("--mode", type=str, default="test", help="modality")
     return parser.parse_args()
 
 
@@ -94,10 +94,45 @@ def sinusoidal_wave(num_actions, num_params, solution, max_t):
     return policies
 
 
+def render_policy(w, h, policy, image_name, magnify=10):
+    import cv2
+    import matplotlib.pyplot as plt
+    image = np.full(shape=(w, h, 3), fill_value=255, dtype=np.uint8)
+    min_val = np.min(policy)
+    max_val = np.max(policy)
+    cx, cy = w // 2, h // 2
+    for x in range(image.shape[0]):
+        for y in range(image.shape[1]):
+            d = round(math.sqrt((x - cx) ** 2 + (y - cy) ** 2))
+            if d >= len(policy):
+                continue
+            c = plt.cm.Greens((policy[d] - min_val) / (max_val - min_val))
+            cv2.rectangle(image,
+                          (int((x - 0.5) * magnify),
+                           int((x - 0.5) * magnify)),
+                          (int((y + 0.5) * magnify),
+                           int((y + 0.5) * magnify)),
+                          color=c,
+                          thickness=-1)
+        cv2.putText(image,
+                    text="Min response: {}".format(round(min_val, 3)),
+                    org=(int((w - 50) * magnify), int(10 * magnify)),
+                    fontFace=cv2.FONT_HERSHEY_COMPLEX,
+                    fontScale=1,
+                    color=(0, 0, 0),
+                    thickness=2)
+        cv2.putText(image,
+                    text="Max response: {}".format(round(max_val, 3)),
+                    org=(int((w - 50) * magnify), int(15 * magnify)),
+                    fontFace=cv2.FONT_HERSHEY_COMPLEX,
+                    fontScale=1,
+                    color=(0, 0, 0),
+                    thickness=2)
+    cv2.imwrite(image_name, image)
+
+
 def simulation(config, solution, render=False):
-    env = gym.make("BipedalWalker-v3")
-    if render:
-        env = gym.wrappers.Monitor(env, "videos", force=True)
+    env = gym.make("MountainCarContinuous-v0")
     env.seed(config.s)
     _ = env.reset()
     fitness = 0.0
@@ -112,6 +147,14 @@ def simulation(config, solution, render=False):
                                      solution=solution,
                                      dt=config.dt,
                                      max_t=env.spec.max_episode_steps)
+    if render:
+        env = gym.wrappers.Monitor(env, "videos", force=True)
+        set_params(params=solution)
+        render_policy(w=env.spec.max_episode_steps * 2 + 1,
+                      h=env.spec.max_episode_steps * 2 + 1,
+                      policy=policies[0],
+                      image_name="policy.png")
+        exit()
     for t in range(env.spec.max_episode_steps):
         action = [policy[t] for policy in policies]
         observation, reward, done, _ = env.step(action)
@@ -122,8 +165,6 @@ def simulation(config, solution, render=False):
         if render:
             env.render()
     env.close()
-    # if video_name is not None:
-    #     policy.render(video_name=video_name)
     return fitness
 
 

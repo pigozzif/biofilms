@@ -5,3 +5,5 @@
 *.png
 *.mp4
 *.pkl
+*.json
+*.xml
