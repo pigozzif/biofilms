@@ -20,7 +20,7 @@ class Bacterium(abc.ABC):
 
 class SignalingBacterium(Bacterium):
     epsilon = 10.0
-    u_0 = 0.02
+    u_0 = 0.01
     firing_threshold = 0.6
 
     def __init__(self, idx):
@@ -62,11 +62,11 @@ class SignalingBacterium(Bacterium):
         self.u_s.append(u_i)
         tau = 300 if self._is_firing(u_t=u_i) else 5
         self.integral = np.trapz(self.u_s, dx=dt)
-        # self.integral = np.sum(self.u_s) * dt
-        # self.integral = (self.u_s[0] + 4 * np.sum(self.u_s[1:-1:2]) + 2 * np.sum(self.u_s[2:-2:2]) + self.u_s[-1]) * (dt / 3)
         messages = sum([lattice.get_coupling(self.idx, neigh["cell"].idx) * (y[neigh["cell"].idx] - u_i)
                         for neigh in lattice.get_neighborhood(self.idx)])
         dy = self.epsilon * (u_i * (1 - u_i) * (u_i - self.u_0) - self.integral / tau) + messages
+        #if self.idx == 0:
+        #    print(dy, u_i)
         if t == 10.0 and self.idx == 0:
             import matplotlib.pyplot as plt
             plt.plot(self.u_s)

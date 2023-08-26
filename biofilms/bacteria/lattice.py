@@ -79,7 +79,7 @@ class SignalingLattice(Lattice):
     def __init__(self, w, h, dt, max_t, phi_c):
         super().__init__(w, h, dt, max_t, lambda x, y: x % 2 == 0, phi_c)
         self._connect_triangular_lattice()
-        self.init_conditions = [1.0 if d["col"] <= 1 and random.random() < 1 else 0.0 for _, d in self._lattice.nodes(data=True)
+        self.init_conditions = [1.0 if d["col"] <= self.w and random.random() < 0.1 else 0.0 for _, d in self._lattice.nodes(data=True)
                                 if d["cell"] is not None]
         self.sol = None
 
@@ -149,10 +149,13 @@ class SignalingLattice(Lattice):
             d["cell"].u_s.append(self.sol.y[d["i"], -1])
 
     def _draw_cell(self, image, d, c, t):
-        cv2.ellipse(image, (int(d["cx"] * self.magnify), int(d["cy"] * self.magnify)),
-                    axes=(int(self.cell_width * self.magnify - self.magnify),
-                          int(self.cell_height * self.magnify - self.magnify / 2)),
-                    angle=0.0, startAngle=0.0, endAngle=360.0, color=c * 255, thickness=-1)
+        try:
+            cv2.ellipse(image, (int(d["cx"] * self.magnify), int(d["cy"] * self.magnify)),
+                        axes=(int(self.cell_width * self.magnify - self.magnify),
+                              int(self.cell_height * self.magnify - self.magnify / 2)),
+                        angle=0.0, startAngle=0.0, endAngle=360.0, color=255 * d["cell"].u_s[t], thickness=-1)
+        except:
+            print(t, len(d["cell"].u_s), self.sol.y.shape)
 
     def render(self, video_name):
         image = self._fill_canvas()
