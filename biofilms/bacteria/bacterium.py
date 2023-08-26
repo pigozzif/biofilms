@@ -18,7 +18,7 @@ class Bacterium(abc.ABC):
         pass
 
 
-class SignallingBacterium(Bacterium):
+class SignalingBacterium(Bacterium):
     epsilon = 10.0
     u0 = 0.02
     firing_threshold = 0.6
@@ -63,7 +63,7 @@ class SignallingBacterium(Bacterium):
         tau = 300 if self._is_firing(ut=y[self.idx]) else 5
         self.integral += quad(lambda x: self._compute_t_prime(), t - dt, t)[0]
         messages = sum([lattice._get_coupling(self.idx, neigh["cell"].idx) * (y[neigh["cell"].idx] - y[self.idx])
-                        for neigh in lattice.get_neighborhood(self)])
+                        for neigh in lattice.get_neighborhood(self.idx)])
         dy = self.epsilon * (y[self.idx] * (1 - y[self.idx]) * (y[self.idx] - self.u0) - self.integral / tau) + messages
         return dy
 

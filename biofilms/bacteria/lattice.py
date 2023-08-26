@@ -8,7 +8,7 @@ import cv2
 import networkx as nx
 from scipy.integrate import solve_ivp
 
-from bacteria.bacterium import SignallingBacterium, ClockBacterium
+from bacteria.bacterium import SignalingBacterium, ClockBacterium
 
 
 class Lattice(abc.ABC):
@@ -39,8 +39,8 @@ class Lattice(abc.ABC):
     def get_center(self):
         return self.w // 2, self.h // 2
 
-    def get_neighborhood(self, cell):
-        return [self._lattice.nodes[neigh] for neigh in self._lattice.neighbors(cell["i"])]
+    def get_neighborhood(self, idx):
+        return [self._lattice.nodes[neigh] for neigh in self._lattice.neighbors(idx)]
 
     def should_step(self, dt):
         return self.t <= self.max_t * dt
@@ -66,14 +66,15 @@ class Lattice(abc.ABC):
 
     @classmethod
     def create_lattice(cls, name, **kwargs):
-        if name == "signalling":
-            return SignallingLattice(kwargs["w"], kwargs["h"], kwargs["dt"], kwargs["max_t"], kwargs["phi_c"])
+        if name == "signaling":
+            return SignalingLattice(kwargs["w"], kwargs["h"], kwargs["dt"], kwargs["max_t"], kwargs["phi_c"])
         elif name == "clock":
             return ClockLattice(kwargs["w"], kwargs["h"], kwargs["dt"], kwargs["max_t"], kwargs["task"])
         raise ValueError("Invalid lattice name: {}".format(name))
 
 
-class SignallingLattice(Lattice):
+class SignalingLattice(Lattice):
+    cell_width = 2.0
 
     def __init__(self, w, h, dt, max_t, phi_c):
         super().__init__(w, h, dt, max_t, lambda x, y: x % 2 == 0, phi_c)
@@ -87,15 +88,15 @@ class SignallingLattice(Lattice):
         i = 0
         for row in range(self.h):
             for col in range(self.w):
-                cell = SignallingBacterium(idx=i, u_init=1.0 if col == 0 else 0.0, phi_c=phi_c)
+                cell = SignalingBacterium(idx=i, u_init=1.0 if col == 0 else 0.0, phi_c=phi_c)
                 if self.is_init_cell(row, col):
                     lattice.add_node(i, i=i, cell=cell, row=row, col=col * 2,
                                      cx=col * self.cell_width + self.cell_width / 2.0,
-                                     cy=math.ceil(row / 2) * self.cell_height + self.cell_height / 2.0)
+                                     cy=row * self.cell_height + self.cell_height / 2.0)
                 else:
-                    lattice.add_node(i, i=i, cell=cell, row=row, col=1 + col * 2,
+                    lattice.add_node(i, i=i, cell=cell, row=row, col=col * 2 + 1,
                                      cx=col * self.cell_width + self.cell_width,
-                                     cy=math.ceil(row / 2) * self.cell_height)
+                                     cy=row * self.cell_height + self.cell_height / 2.0)
                 i += 1
         return lattice
 
@@ -155,16 +156,14 @@ class SignallingLattice(Lattice):
                     angle=0.0, startAngle=0.0, endAngle=360.0, color=c, thickness=-1)
 
     def render(self, video_name):
-        renderer = None
+        image = self._fill_canvas()
+        fourcc = cv2.VideoWriter_fourcc(*'MP4V')
+        renderer = cv2.VideoWriter(video_name, fourcc, 20, (image.shape[1], image.shape[0]))
         for i in range(self.max_t):
-            image = self._fill_canvas()
             for _, d in self._lattice.nodes(data=True):
                 if d["cell"] is None:
                     continue
                 self._draw_cell(image=image, d=d, c=self.sol.y[d["i"], i])
-            if renderer is None:
-                fourcc = cv2.VideoWriter_fourcc(*'MP4V')
-                renderer = cv2.VideoWriter(video_name, fourcc, 20, (image.shape[1], image.shape[0]))
             renderer.write(image)
 
     def get_fitness(self):
