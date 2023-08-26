@@ -20,19 +20,22 @@ class Bacterium(abc.ABC):
 
 class SignalingBacterium(Bacterium):
     epsilon = 10.0
-    u0 = 0.02
+    u_0 = 0.02
     firing_threshold = 0.6
 
     def __init__(self, idx):
         super().__init__(idx)
         self.integral = 0.0
-        self.us = []
+        self.u_s = []
 
-    def _is_firing(self, ut):
-        return ut > self.u0  # self.firing_threshold
+    def _is_firing(self, u_t):
+        return u_t > self.u_0  # self.firing_threshold
 
     def _compute_t_prime(self):
-        return self.us[-1]
+        return self.u_s[-1]
+
+    def _compute_t(self, t):
+        return self.u_s[int(t)]
 
     # @staticmethod
     # def _compute_delta(lattice, t, dt):
@@ -42,12 +45,12 @@ class SignalingBacterium(Bacterium):
     #                     for neigh in lattice.get_neighborhood(self)])
     #     if self.idx == 0:
     #         print(round(t / dt), self.ut, self.firing, self.integral, messages)
-    #     return self.epsilon * (self.ut * (1 - self.ut) * (self.ut - self.u0) - self.integral / tau) + messages
+    #     return self.epsilon * (self.ut * (1 - self.ut) * (self.ut - self.u_0) - self.integral / tau) + messages
 
     # def propagate(self, lattice, t, dt):
     #     du = dt * self._compute_delta(lattice=lattice, t=t, dt=dt)
     #     self.ut += du
-    #     self.us.append(self.ut)
+    #     self.u_s.append(self.ut)
     #     self.u_old = self.ut
     #     self.firing = self._is_firing(self.u_old)
 
@@ -55,12 +58,20 @@ class SignalingBacterium(Bacterium):
         return
 
     def FitzHughNagumo_percolate(self, t, y, lattice, dt):
-        self.us.append(y[self.idx])
-        tau = 300 if self._is_firing(ut=y[self.idx]) else 5
-        self.integral += quad(lambda x: self._compute_t_prime(), t - dt, t)[0]
-        messages = sum([lattice.get_coupling(self.idx, neigh["cell"].idx) * (y[neigh["cell"].idx] - y[self.idx])
+        u_i = y[self.idx]
+        self.u_s.append(u_i)
+        tau = 300 if self._is_firing(u_t=u_i) else 5
+        self.integral = np.trapz(self.u_s, dx=dt)
+        # self.integral = np.sum(self.u_s) * dt
+        # self.integral = (self.u_s[0] + 4 * np.sum(self.u_s[1:-1:2]) + 2 * np.sum(self.u_s[2:-2:2]) + self.u_s[-1]) * (dt / 3)
+        messages = sum([lattice.get_coupling(self.idx, neigh["cell"].idx) * (y[neigh["cell"].idx] - u_i)
                         for neigh in lattice.get_neighborhood(self.idx)])
-        dy = self.epsilon * (y[self.idx] * (1 - y[self.idx]) * (y[self.idx] - self.u0) - self.integral / tau) + messages
+        dy = self.epsilon * (u_i * (1 - u_i) * (u_i - self.u_0) - self.integral / tau) + messages
+        if t == 10.0 and self.idx == 0:
+            import matplotlib.pyplot as plt
+            plt.plot(self.u_s)
+            # plt.ylim(0.965, 1.1)
+            plt.savefig("pulse.png")
         return dy
 
     def draw(self, t, min_val, max_val):

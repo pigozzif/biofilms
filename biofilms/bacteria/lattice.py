@@ -79,7 +79,7 @@ class SignalingLattice(Lattice):
     def __init__(self, w, h, dt, max_t, phi_c):
         super().__init__(w, h, dt, max_t, lambda x, y: x % 2 == 0, phi_c)
         self._connect_triangular_lattice()
-        self.init_conditions = [1.0 if d["col"] <= 1 else 0.0 for _, d in self._lattice.nodes(data=True)
+        self.init_conditions = [1.0 if d["col"] <= 1 and random.random() < 1 else 0.0 for _, d in self._lattice.nodes(data=True)
                                 if d["cell"] is not None]
         self.sol = None
 
@@ -131,7 +131,7 @@ class SignalingLattice(Lattice):
         return
 
     def get_coupling(self, i, j):
-        return 0.5 if j == i + 1 or j == i - 1 else 0.25
+        return 0.5 if j == i + 2 * self.w or j == i - 2 * self.w else 0.25
 
     def _propagate(self, t, y):
         dy = np.array([d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self, dt=self.dt)
@@ -146,7 +146,7 @@ class SignalingLattice(Lattice):
         if self.sol.y.shape[1] != self.max_t:
             raise RuntimeError("Integration failed: {}".format(self.sol.y.shape))
         for _, d in self._lattice.nodes(data=True):
-            d["cell"].us.append(self.sol.y[d["i"], -1])
+            d["cell"].u_s.append(self.sol.y[d["i"], -1])
 
     def _draw_cell(self, image, d, c, t):
         cv2.ellipse(image, (int(d["cx"] * self.magnify), int(d["cy"] * self.magnify)),
