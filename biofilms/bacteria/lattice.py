@@ -79,8 +79,10 @@ class SignalingLattice(Lattice):
     def __init__(self, w, h, dt, max_t, phi_c):
         super().__init__(w, h, dt, max_t, lambda x, y: x % 2 == 0, phi_c)
         self._connect_triangular_lattice()
-        self.init_conditions = [1.0 if d["col"] <= self.w and random.random() < 0.1 else 0.0 for _, d in self._lattice.nodes(data=True)
-                                if d["cell"] is not None]
+        self.init_conditions = []
+        for _, d in self._lattice.nodes(data=True):
+            self.init_conditions.append(1.0 if d["col"] <= self.w and random.random() < 0.2 else 0.0)
+            self.init_conditions.append(0.0)
         self.sol = None
 
     def init_lattice(self, phi_c):
@@ -135,7 +137,7 @@ class SignalingLattice(Lattice):
 
     def _propagate(self, t, y):
         dy = np.array([d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self, dt=self.dt)
-                       for _, d in self._lattice.nodes(data=True)])
+                       for _, d in self._lattice.nodes(data=True)]).ravel()
         return dy
 
     def solve(self, dt):
@@ -146,16 +148,18 @@ class SignalingLattice(Lattice):
         if self.sol.y.shape[1] != self.max_t:
             raise RuntimeError("Integration failed: {}".format(self.sol.y.shape))
         for _, d in self._lattice.nodes(data=True):
-            d["cell"].u_s.append(self.sol.y[d["i"], -1])
+            if d["i"] == 0:
+                import matplotlib.pyplot as plt
+                plt.plot(self.sol.y[0, :], label="solution")
+                plt.plot(d["cell"].u_s, label="witnessed")
+                plt.legend()
+                plt.savefig("pulses.png")
 
     def _draw_cell(self, image, d, c, t):
-        try:
-            cv2.ellipse(image, (int(d["cx"] * self.magnify), int(d["cy"] * self.magnify)),
-                        axes=(int(self.cell_width * self.magnify - self.magnify),
-                              int(self.cell_height * self.magnify - self.magnify / 2)),
-                        angle=0.0, startAngle=0.0, endAngle=360.0, color=255 * d["cell"].u_s[t], thickness=-1)
-        except:
-            print(t, len(d["cell"].u_s), self.sol.y.shape)
+        cv2.ellipse(image, (int(d["cx"] * self.magnify), int(d["cy"] * self.magnify)),
+                    axes=(int(self.cell_width * self.magnify - self.magnify),
+                          int(self.cell_height * self.magnify - self.magnify / 2)),
+                    angle=0.0, startAngle=0.0, endAngle=360.0, color=255 * c, thickness=-1)
 
     def render(self, video_name):
         image = self._fill_canvas()
@@ -164,7 +168,7 @@ class SignalingLattice(Lattice):
         print(self.sol.y.min(), self.sol.y.max())
         for t in range(self.max_t - 1):
             for _, d in self._lattice.nodes(data=True):
-                self._draw_cell(image=image, d=d, c=self.sol.y[d["i"], t], t=t)
+                self._draw_cell(image=image, d=d, c=self.sol.y[d["i"] * 2, t], t=t)
             renderer.write(image)
 
     def get_fitness(self):

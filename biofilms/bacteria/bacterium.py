@@ -19,13 +19,12 @@ class Bacterium(abc.ABC):
 
 
 class SignalingBacterium(Bacterium):
-    epsilon = 10.0
+    epsilon = 10
     u_0 = 0.01
     firing_threshold = 0.6
 
     def __init__(self, idx):
         super().__init__(idx)
-        self.integral = 0.0
         self.u_s = []
 
     def _is_firing(self, u_t):
@@ -58,21 +57,13 @@ class SignalingBacterium(Bacterium):
         return
 
     def FitzHughNagumo_percolate(self, t, y, lattice, dt):
-        u_i = y[self.idx]
+        u_i, w_i = y[self.idx * 2], y[self.idx * 2 + 1]
         self.u_s.append(u_i)
         tau = 300 if self._is_firing(u_t=u_i) else 5
-        self.integral = np.trapz(self.u_s, dx=dt)
         messages = sum([lattice.get_coupling(self.idx, neigh["cell"].idx) * (y[neigh["cell"].idx] - u_i)
                         for neigh in lattice.get_neighborhood(self.idx)])
-        dy = self.epsilon * (u_i * (1 - u_i) * (u_i - self.u_0) - self.integral / tau) + messages
-        #if self.idx == 0:
-        #    print(dy, u_i)
-        if t == 10.0 and self.idx == 0:
-            import matplotlib.pyplot as plt
-            plt.plot(self.u_s)
-            # plt.ylim(0.965, 1.1)
-            plt.savefig("pulse.png")
-        return dy
+        dy = self.epsilon * (u_i * (1 - u_i ** 2) * (u_i - self.u_0) - w_i) + messages
+        return dy, u_i / tau
 
     def draw(self, t, min_val, max_val):
         raise NotImplementedError
