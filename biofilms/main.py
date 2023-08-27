@@ -1,5 +1,4 @@
 import argparse
-import math
 import os
 from multiprocessing import Pool
 import random
@@ -25,9 +24,9 @@ def parse_args():
     parser.add_argument("--policy", type=str, default="bact", help="problem")
     parser.add_argument("--np", type=int, default=7, help="parallel optimization processes")
     parser.add_argument("--solver", type=str, default="afpo", help="solver")
-    parser.add_argument("--n_params", type=int, default=1, help="action space size")
-    parser.add_argument("--evals", type=int, default=30000, help="fitness evaluations")
-    parser.add_argument("--mode", type=str, default="test", help="modality")
+    parser.add_argument("--n_params", type=int, default=2, help="action space size")
+    parser.add_argument("--evals", type=int, default=1000, help="fitness evaluations")
+    parser.add_argument("--mode", type=str, default="opt", help="modality")
     return parser.parse_args()
 
 
@@ -76,13 +75,13 @@ def set_params(params):
 
 def integrate_lattice(num_actions, num_params, solution, dt, max_t):
     policies = []
-    solution = np.clip(solution, a_min=0.0, a_max=None)
+    set_params(params=[max(solution[0], 0.0) * 40000, max(solution[1], 0.0) * 200000])
+    trace = solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
+                      t_span=[0.0, max_t * dt],
+                      t_eval=[i * dt for i in range(max_t)],
+                      y0=ClockLattice.init_conditions).y[8]
     for i in range(num_actions):
-        set_params(params=solution[i * num_params: (i + 1) * num_params])
-        policies.append(solve_ivp(fun=ClockBacterium.NasA_oscIII_D,
-                                  t_span=[0.0, max_t * dt],
-                                  t_eval=[i * dt for i in range(max_t)],
-                                  y0=ClockLattice.init_conditions).y[8])
+        policies.append(solution[num_params + i * 2] * np.tanh(trace) + solution[num_params + (i * 2 + 1)])
     return policies
 
 
@@ -94,48 +93,8 @@ def sinusoidal_wave(num_actions, num_params, solution, max_t):
     return policies
 
 
-def render_policy(w, h, policy, image_name, magnify=10):
-    import cv2
-    import matplotlib.pyplot as plt
-    image = np.full(shape=(w, h, 3), fill_value=255, dtype=np.uint8)
-    min_val = np.min(policy)
-    max_val = np.max(policy)
-    cx, cy = w // 2, h // 2
-    for x in range(image.shape[0]):
-        for y in range(image.shape[1]):
-            d = round(math.sqrt((x - cx) ** 2 + (y - cy) ** 2))
-            if d >= len(policy):
-                continue
-            c = plt.cm.Greens((policy[d] - min_val) / (max_val - min_val))
-            cv2.rectangle(image,
-                          (int((x - 0.5) * magnify),
-                           int((x - 0.5) * magnify)),
-                          (int((y + 0.5) * magnify),
-                           int((y + 0.5) * magnify)),
-                          color=c,
-                          thickness=-1)
-        cv2.putText(image,
-                    text="Min response: {}".format(round(min_val, 3)),
-                    org=(int((w - 50) * magnify), int(10 * magnify)),
-                    fontFace=cv2.FONT_HERSHEY_COMPLEX,
-                    fontScale=1,
-                    color=(0, 0, 0),
-                    thickness=2)
-        cv2.putText(image,
-                    text="Max response: {}".format(round(max_val, 3)),
-                    org=(int((w - 50) * magnify), int(15 * magnify)),
-                    fontFace=cv2.FONT_HERSHEY_COMPLEX,
-                    fontScale=1,
-                    color=(0, 0, 0),
-                    thickness=2)
-    cv2.imwrite(image_name, image)
-
-
 def simulation(config, solution, render=False):
-    env = gym.make("MountainCarContinuous-v0")
-    env.seed(config.s)
-    _ = env.reset()
-    fitness = 0.0
+    env = gym.make("BipedalWalker-v3")
     if config.policy == "sin":
         policies = sinusoidal_wave(num_actions=env.action_space.shape[0],
                                    num_params=config.n_params // env.action_space.shape[0],
@@ -148,13 +107,14 @@ def simulation(config, solution, render=False):
                                      dt=config.dt,
                                      max_t=env.spec.max_episode_steps)
     if render:
+        import matplotlib.pyplot as plt
         env = gym.wrappers.Monitor(env, "videos", force=True)
-        set_params(params=solution)
-        render_policy(w=env.spec.max_episode_steps * 2 + 1,
-                      h=env.spec.max_episode_steps * 2 + 1,
-                      policy=policies[0],
-                      image_name="policy.png")
-        exit()
+        for policy in policies:
+            plt.plot(policy)
+        plt.savefig("policies.png")
+    env.seed(config.s)
+    _ = env.reset()
+    fitness = 0.0
     for t in range(env.spec.max_episode_steps):
         action = [policy[t] for policy in policies]
         observation, reward, done, _ = env.step(action)
@@ -172,7 +132,7 @@ if __name__ == "__main__":
     args = parse_args()
     set_seed(args.s)
     file_name = os.path.join("output", ".".join([args.policy, args.solver, str(args.s), "txt"]))
-    args.n_params *= 4 if args.policy == "sin" else 2
+    args.n_params += 8  # if args.policy == "sin" else 2
     if args.mode == "opt":
         objectives_dict = ObjectiveDict()
         objectives_dict.add_objective(name="fitness", maximize=True, best_value=300.0, worst_value=-100)
@@ -190,9 +150,9 @@ if __name__ == "__main__":
                                                 genotype_filter=None,
                                                 tournament_size=5,
                                                 mu=0.0,
-                                                sigma=20000,
+                                                sigma=0.2,
                                                 n=args.n_params,
-                                                range=(0, 200000))
+                                                range=(-1, 1))
         best = parallel_solve(solver=solver, config=args, listener=listener)
         logging.warning("fitness score at this local optimum: {}".format(best[1]))
     else:
