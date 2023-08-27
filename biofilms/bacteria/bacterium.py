@@ -30,22 +30,6 @@ class SignalingBacterium(Bacterium):
     def _is_firing(self, u_t):
         return u_t > self.u_0  # self.firing_threshold
 
-    def _compute_t_prime(self):
-        return self.u_s[-1]
-
-    def _compute_t(self, t):
-        return self.u_s[int(t)]
-
-    # @staticmethod
-    # def _compute_delta(lattice, t, dt):
-    #     tau = 300 if self.firing else 5
-    #     self.integral = dt * (quad(lambda x: self._compute_t_prime(x, dt), t - dt, t)[0] + self.integral)
-    #     messages = sum([lattice._get_coupling(self.idx, neigh["cell"].idx) * (neigh["cell"].u_old - self.ut)
-    #                     for neigh in lattice.get_neighborhood(self)])
-    #     if self.idx == 0:
-    #         print(round(t / dt), self.ut, self.firing, self.integral, messages)
-    #     return self.epsilon * (self.ut * (1 - self.ut) * (self.ut - self.u_0) - self.integral / tau) + messages
-
     # def propagate(self, lattice, t, dt):
     #     du = dt * self._compute_delta(lattice=lattice, t=t, dt=dt)
     #     self.ut += du
