@@ -81,7 +81,7 @@ class SignalingLattice(Lattice):
         self._connect_triangular_lattice()
         self.init_conditions = []
         for _, d in self._lattice.nodes(data=True):
-            self.init_conditions.append(1.0 if d["col"] <= self.w and random.random() < 0.2 else 0.0)
+            self.init_conditions.append(1.0 if d["col"] <= self.w * 3 and random.random() < phi_c else 0.0)
             self.init_conditions.append(0.0)
         self.sol = None
 
@@ -136,7 +136,7 @@ class SignalingLattice(Lattice):
         return 0.5 if j == i + 2 * self.w or j == i - 2 * self.w else 0.25
 
     def _propagate(self, t, y):
-        dy = np.array([d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self, dt=self.dt)
+        dy = np.array([d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self)
                        for _, d in self._lattice.nodes(data=True)]).ravel()
         return dy
 
@@ -150,8 +150,8 @@ class SignalingLattice(Lattice):
         for _, d in self._lattice.nodes(data=True):
             if d["i"] == 0:
                 import matplotlib.pyplot as plt
-                plt.plot(self.sol.y[0, :], label="solution")
-                plt.plot(d["cell"].u_s, label="witnessed")
+                plt.plot([np.count_nonzero(self.sol.y[::2, t] > SignalingBacterium.u_0) / (self.sol.y.shape[0] / 2)
+                          for t in range(self.max_t)], label="% firing")
                 plt.legend()
                 plt.savefig("pulses.png")
 

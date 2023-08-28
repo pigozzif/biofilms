@@ -1,6 +1,5 @@
 import abc
 
-from scipy.integrate import quad
 import numpy as np
 
 
@@ -21,33 +20,24 @@ class Bacterium(abc.ABC):
 class SignalingBacterium(Bacterium):
     epsilon = 10
     u_0 = 0.01
-    firing_threshold = 0.6
 
     def __init__(self, idx):
         super().__init__(idx)
-        self.u_s = []
 
     def _is_firing(self, u_t):
-        return u_t > self.u_0  # self.firing_threshold
-
-    # def propagate(self, lattice, t, dt):
-    #     du = dt * self._compute_delta(lattice=lattice, t=t, dt=dt)
-    #     self.ut += du
-    #     self.u_s.append(self.ut)
-    #     self.u_old = self.ut
-    #     self.firing = self._is_firing(self.u_old)
+        return u_t > self.u_0
 
     def propagate(self, lattice, t, dt, d):
         return
 
-    def FitzHughNagumo_percolate(self, t, y, lattice, dt):
+    def FitzHughNagumo_percolate(self, t, y, lattice):
         u_i, w_i = y[self.idx * 2], y[self.idx * 2 + 1]
-        self.u_s.append(u_i)
-        tau = 300 if self._is_firing(u_t=u_i) else 5
-        messages = sum([lattice.get_coupling(self.idx, neigh["cell"].idx) * (y[neigh["cell"].idx] - u_i)
+        tau = 5 if self._is_firing(u_t=u_i) else 5 / 60
+        messages = sum([lattice.get_coupling(self.idx, neigh["cell"].idx) * (y[neigh["cell"].idx * 2] - u_i)
                         for neigh in lattice.get_neighborhood(self.idx)])
-        dy = self.epsilon * (u_i * (1 - u_i ** 2) * (u_i - self.u_0) - w_i) + messages
-        return dy, u_i / tau
+        du = self.epsilon * (u_i * (1 - u_i) * (u_i - self.u_0) - w_i) + messages
+        # du = u_i - (u_i ** 3) / 3 - w_i + messages
+        return [du, u_i / tau]
 
     def draw(self, t, min_val, max_val):
         raise NotImplementedError
