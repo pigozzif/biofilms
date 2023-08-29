@@ -12,8 +12,8 @@ import numpy as np
 def parse_args():
     parser = argparse.ArgumentParser(prog="BiofilmSimulation", description="Simulate a B. subtilis biofilm")
     parser.add_argument("--s", type=int, default=0, help="seed")
-    parser.add_argument("--w", type=int, default=30, help="width in cells of the biofilm")
-    parser.add_argument("--h", type=int, default=50, help="height in cells of the biofilm")
+    parser.add_argument("--w", type=int, default=200, help="width in cells of the biofilm")
+    parser.add_argument("--h", type=int, default=35, help="height in cells of the biofilm")
     parser.add_argument("--dt", type=float, default=0.02, help="integration step")
     parser.add_argument("--t", type=int, default=1000, help="max simulation steps")
     parser.add_argument("--p", type=str, default="signaling", help="problem")

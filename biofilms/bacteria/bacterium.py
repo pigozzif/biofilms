@@ -19,7 +19,8 @@ class Bacterium(abc.ABC):
 
 class SignalingBacterium(Bacterium):
     epsilon = 10
-    u_0 = 0.01
+    u_0 = 0.02
+    tau = 300
 
     def __init__(self, idx):
         super().__init__(idx)
@@ -32,11 +33,11 @@ class SignalingBacterium(Bacterium):
 
     def FitzHughNagumo_percolate(self, t, y, lattice):
         u_i, w_i = y[self.idx * 2], y[self.idx * 2 + 1]
-        tau = 5 if self._is_firing(u_t=u_i) else 5 / 60
-        messages = sum([lattice.get_coupling(self.idx, neigh["cell"].idx) * (y[neigh["cell"].idx * 2] - u_i)
-                        for neigh in lattice.get_neighborhood(self.idx)])
-        du = self.epsilon * (u_i * (1 - u_i) * (u_i - self.u_0) - w_i) + messages
-        # du = u_i - (u_i ** 3) / 3 - w_i + messages
+        tau = self.tau if self._is_firing(u_t=u_i) else self.tau / 60
+        messages = [lattice.get_coupling(self.idx, neigh["cell"].idx) * (y[neigh["cell"].idx * 2] - u_i)
+                    for neigh in lattice.get_neighborhood(self.idx)]
+        du = self.epsilon * (u_i * (1 - u_i) * (u_i - self.u_0) - w_i) + sum(messages)
+        # du = u_i - (u_i ** 3) / 3 - w_i + sum(messages)
         return [du, u_i / tau]
 
     def draw(self, t, min_val, max_val):
@@ -102,7 +103,8 @@ class ClockBacterium(Bacterium):
 
     @staticmethod
     def update_F(s, q, f):
-        return ClockBacterium.alpha_f * ((s * q ** ClockBacterium.n1) / (ClockBacterium.kappa_f ** ClockBacterium.n1 + q ** ClockBacterium.n1)) -\
+        return ClockBacterium.alpha_f * ((s * q ** ClockBacterium.n1) / (
+                ClockBacterium.kappa_f ** ClockBacterium.n1 + q ** ClockBacterium.n1)) - \
                ClockBacterium.beta_f * f
 
     @staticmethod
@@ -112,7 +114,8 @@ class ClockBacterium(Bacterium):
     @staticmethod
     def update_A(t, a):
         return ClockBacterium.alpha_a * (
-                (ClockBacterium.kappa_t ** ClockBacterium.n2) / (ClockBacterium.kappa_t ** ClockBacterium.n2 + t ** ClockBacterium.n2)) - ClockBacterium.beta_a * a
+                (ClockBacterium.kappa_t ** ClockBacterium.n2) / (
+                ClockBacterium.kappa_t ** ClockBacterium.n2 + t ** ClockBacterium.n2)) - ClockBacterium.beta_a * a
 
     @staticmethod
     def update_R(t, r):
