@@ -20,7 +20,7 @@ class Bacterium(abc.ABC):
 class SignalingBacterium(Bacterium):
     epsilon = 10
     u_0 = 0.02
-    tau = 300
+    tau = 5
 
     def __init__(self, idx):
         super().__init__(idx)
@@ -34,8 +34,13 @@ class SignalingBacterium(Bacterium):
     def FitzHughNagumo_percolate(self, t, y, lattice):
         u_i, w_i = y[self.idx * 2], y[self.idx * 2 + 1]
         tau = self.tau if self._is_firing(u_t=u_i) else self.tau / 60
-        messages = [lattice.get_coupling(self.idx, neigh["cell"].idx) * (y[neigh["cell"].idx * 2] - u_i)
-                    for neigh in lattice.get_neighborhood(self.idx)]
+        messages = []
+        for neigh in lattice.get_neighborhood(self.idx):
+            if neigh["row"] == lattice.h - 1:
+                u_j = lattice.last_row_y[self.idx]
+            else:
+                u_j = y[neigh["cell"].idx * 2]
+            messages.append(lattice.get_coupling(self.idx, neigh["cell"].idx) * (u_j - u_i))
         du = self.epsilon * (u_i * (1 - u_i) * (u_i - self.u_0) - w_i) + sum(messages)
         # du = u_i - (u_i ** 3) / 3 - w_i + sum(messages)
         return [du, u_i / tau]

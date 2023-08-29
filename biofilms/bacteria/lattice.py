@@ -77,11 +77,16 @@ class SignalingLattice(Lattice):
     cell_width = 2.0
 
     def __init__(self, w, h, dt, max_t, phi_c):
-        super().__init__(w, h, dt, max_t, lambda x, y: x % 2 == 0, phi_c)
+        super().__init__(w, h + 1, dt, max_t, lambda x, y: x % 2 == 0, phi_c)
         self._connect_triangular_lattice()
         self.init_conditions = []
-        for _, d in self._lattice.nodes(data=True):
-            self.init_conditions.append(1.0 if d["row"] <= 0 and random.random() < 1 else 0.0)
+        self.last_row_y = {}
+        for node, d in self._lattice.nodes(data=True):
+            if self._is_boundary(d=d):
+                continue
+            elif self._is_almost_boundary(d=d):
+                self.last_row_y[node] = 0.0
+            self.init_conditions.append(1.0 if d["row"] <= self.w and random.random() < phi_c else 0.0)
             self.init_conditions.append(0.0)
         self.sol = None
 
@@ -105,11 +110,11 @@ class SignalingLattice(Lattice):
     def _connect_triangular_lattice(self):
         for node, d in self._lattice.nodes(data=True):
             row = d["row"]
-            neigh = node + 2 * self.w
-            if self._lattice.has_node(neigh) and self._lattice.nodes[neigh]["row"] > d["row"]:
+            neigh = node + 1
+            if self._lattice.has_node(neigh) and self._lattice.nodes[neigh]["col"] > d["col"]:
                 self._lattice.add_edge(node, neigh)
-            neigh = node - 2 * self.w
-            if self._lattice.has_node(neigh) and self._lattice.nodes[neigh]["row"] < d["row"]:
+            neigh = node - 1
+            if self._lattice.has_node(neigh) and self._lattice.nodes[neigh]["col"] < d["col"]:
                 self._lattice.add_edge(node, neigh)
             neigh = node + self.w if row % 2 == 0 else node + self.w + 1
             if self._lattice.has_node(neigh) and self._lattice.nodes[neigh]["row"] > d["row"] \
@@ -129,16 +134,25 @@ class SignalingLattice(Lattice):
                 self._lattice.add_edge(node, neigh)
         return self._lattice
 
+    def _is_boundary(self, d):
+        return d["row"] == self.h - 1
+
+    def _is_almost_boundary(self, d):
+        return d["row"] == self.h - 2
+
     def set_params(self, params):
         return
 
     def get_coupling(self, i, j):
-        return 0.5 if j == i + 2 * self.w or j == i - 2 * self.w else 0.25
+        return 0.5 if j == i + 1 or j == i - 1 else 0.25
 
     def _propagate(self, t, y):
         print(t)
         dy = np.array([d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self)
-                       for _, d in self._lattice.nodes(data=True)]).ravel()
+                       for _, d in self._lattice.nodes(data=True) if not self._is_boundary(d=d)]).ravel()
+        for node, d in self._lattice.nodes(data=True):
+            if self._is_almost_boundary(d=d):
+                self.last_row_y[node] = y[node * 2]
         return dy
 
     def solve(self, dt):
@@ -169,6 +183,8 @@ class SignalingLattice(Lattice):
         print(self.sol.y.min(), self.sol.y.max())
         for t in range(self.max_t - 1):
             for _, d in self._lattice.nodes(data=True):
+                if d["row"] == self.h - 1:
+                    continue
                 self._draw_cell(image=image, d=d, c=self.sol.y[d["i"] * 2, t], t=t)
             renderer.write(image)
 
