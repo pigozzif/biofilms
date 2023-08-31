@@ -83,11 +83,10 @@ class SignalingLattice(Lattice):
         for node, d in self._lattice.nodes(data=True):
             self.init_conditions.append(obs[int((d["row"] * len(obs)) / self.h) - 1] if d["col"] == 0 else 0.0)
             self.init_conditions.append(0.0)
-        self.sol = None
+        self.sol = np.zeros((self.max_t, len(self.init_conditions)))
         self.obs = obs
         self.fitness = 0.0
         self.done = False
-        self.last_t = -1
 
     def init_lattice(self, phi_c):
         lattice = nx.Graph()
@@ -154,32 +153,29 @@ class SignalingLattice(Lattice):
                 action[int((d["row"] * n) / self.h)] += y[node * 2]
         return action / (self.h / n)
 
-    def episode(self, t, y, env, render):
-        print(t, int(t / self.dt))
-        dy = self._propagate(t=t, y=y)
-        if int(t / self.dt) > self.last_t:
-            self.last_t = int(t / self.dt)
-            action = self._act(n=env.action_space.shape[0], y=y)
-            self.obs, reward, self.done, _ = env.step(np.clip(action,
-                                                              a_min=env.action_space.low,
-                                                              a_max=env.action_space.high))
-            self.fitness += reward
-            if self.done:
-                _ = env.reset()
-            if render:
-                env.render()
-        return dy
+    def episode(self, y, env, render):
+        action = self._act(n=env.action_space.shape[0], y=y)
+        self.obs, reward, self.done, _ = env.step(np.clip(action,
+                                                          a_min=env.action_space.low,
+                                                          a_max=env.action_space.high))
+        self.fitness += reward
+        if self.done:
+            _ = env.reset()
+        if render:
+            env.render()
 
     def solve(self, env, render):
         self.obs = env.reset()
-        self.sol = solve_ivp(fun=self.episode,
-                             t_span=[0.0, self.max_t * self.dt],
-                             t_eval=[i * self.dt for i in range(self.max_t)],
-                             y0=self.init_conditions,
-                             events=lambda t, y, e, r: -1 if not self.done else 1,
-                             args=[env, render])
-        if self.sol.y.shape[1] != self.max_t:
-            raise RuntimeError("Integration failed: {}".format(self.sol.y.shape))
+        y = self.init_conditions
+        for t in range(self.max_t):
+            self.obs[-1] /= 8.0
+            # self.obs += 1.0
+            # self.obs /= 2.0
+            for i in range(int(1 / self.dt)):
+                dy = self._propagate(t=t + i * self.dt, y=y)
+                y += self.dt * dy
+            self.episode(y=y, env=env, render=render)
+            self.sol[t] = y
 
     def _draw_cell(self, image, d, c, t):
         cv2.ellipse(image, (int(d["cx"] * self.magnify), int(d["cy"] * self.magnify)),
@@ -191,12 +187,12 @@ class SignalingLattice(Lattice):
         image = self._fill_canvas()
         fourcc = cv2.VideoWriter_fourcc(*'MP4V')
         renderer = cv2.VideoWriter(video_name, fourcc, 20, (image.shape[1], image.shape[0]))
-        print(self.sol.y.min(), self.sol.y.max())
+        print(self.sol.min(), self.sol.max())
         for t in range(self.max_t - 1):
             for _, d in self._lattice.nodes(data=True):
                 if d["row"] == self.h - 1:
                     continue
-                self._draw_cell(image=image, d=d, c=self.sol.y[d["i"] * 2, t], t=t)
+                self._draw_cell(image=image, d=d, c=self.sol[t, d["i"] * 2], t=t)
             renderer.write(image)
 
     def get_fitness(self):
