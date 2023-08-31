@@ -46,7 +46,7 @@ class Lattice(abc.ABC):
         return self.t <= self.max_t * dt
 
     @abc.abstractmethod
-    def solve(self, dt):
+    def solve(self):
         pass
 
     def _fill_canvas(self):
@@ -67,7 +67,7 @@ class Lattice(abc.ABC):
     @classmethod
     def create_lattice(cls, name, **kwargs):
         if name == "signaling":
-            return SignalingLattice(kwargs["w"], kwargs["h"], kwargs["dt"], kwargs["max_t"], kwargs["phi_c"])
+            return SignalingLattice(kwargs["w"], kwargs["h"], kwargs["dt"], kwargs["max_t"], kwargs["obs"])
         elif name == "clock":
             return ClockLattice(kwargs["w"], kwargs["h"], kwargs["dt"], kwargs["max_t"], kwargs["task"])
         raise ValueError("Invalid lattice name: {}".format(name))
@@ -76,19 +76,18 @@ class Lattice(abc.ABC):
 class SignalingLattice(Lattice):
     cell_width = 2.0
 
-    def __init__(self, w, h, dt, max_t, phi_c):
-        super().__init__(w, h + 1, dt, max_t, lambda x, y: x % 2 == 0, phi_c)
+    def __init__(self, w, h, dt, max_t, obs):
+        super().__init__(w, h, dt, max_t, lambda x, y: x % 2 == 0)
         self._connect_triangular_lattice()
         self.init_conditions = []
-        self.last_row_y = {}
         for node, d in self._lattice.nodes(data=True):
-            if self._is_boundary(d=d):
-                continue
-            elif self._is_almost_boundary(d=d):
-                self.last_row_y[node] = 0.0
-            self.init_conditions.append(1.0 if d["row"] <= self.w and random.random() < phi_c else 0.0)
+            self.init_conditions.append(obs[int((d["row"] * len(obs)) / self.h) - 1] if d["col"] == 0 else 0.0)
             self.init_conditions.append(0.0)
         self.sol = None
+        self.obs = obs
+        self.fitness = 0.0
+        self.done = False
+        self.last_t = -1
 
     def init_lattice(self, phi_c):
         lattice = nx.Graph()
@@ -134,12 +133,6 @@ class SignalingLattice(Lattice):
                 self._lattice.add_edge(node, neigh)
         return self._lattice
 
-    def _is_boundary(self, d):
-        return d["row"] == self.h - 1
-
-    def _is_almost_boundary(self, d):
-        return d["row"] == self.h - 2
-
     def set_params(self, params):
         return
 
@@ -147,18 +140,44 @@ class SignalingLattice(Lattice):
         return 0.5 if j == i + 1 or j == i - 1 else 0.25
 
     def _propagate(self, t, y):
-        dy = np.array([d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self)
-                       for _, d in self._lattice.nodes(data=True) if not self._is_boundary(d=d)]).ravel()
+        dy = np.zeros_like(y)
         for node, d in self._lattice.nodes(data=True):
-            if self._is_almost_boundary(d=d):
-                self.last_row_y[node] = y[node * 2]
+            du = d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self, row=d["row"], col=d["col"])
+            dy[node * 2] = du[0]
+            dy[node * 2 + 1] = du[1]
         return dy
 
-    def solve(self, dt):
-        self.sol = solve_ivp(fun=self._propagate,
+    def _act(self, n, y):
+        action = np.zeros(n)
+        for node, d in self._lattice.nodes(data=True):
+            if d["col"] == self.w - 1:
+                action[int((d["row"] * n) / self.h)] += y[node * 2]
+        return action / (self.h / n)
+
+    def episode(self, t, y, env, render):
+        print(t, int(t / self.dt))
+        dy = self._propagate(t=t, y=y)
+        if int(t / self.dt) > self.last_t:
+            self.last_t = int(t / self.dt)
+            action = self._act(n=env.action_space.shape[0], y=y)
+            self.obs, reward, self.done, _ = env.step(np.clip(action,
+                                                              a_min=env.action_space.low,
+                                                              a_max=env.action_space.high))
+            self.fitness += reward
+            if self.done:
+                _ = env.reset()
+            if render:
+                env.render()
+        return dy
+
+    def solve(self, env, render):
+        self.obs = env.reset()
+        self.sol = solve_ivp(fun=self.episode,
                              t_span=[0.0, self.max_t * self.dt],
                              t_eval=[i * self.dt for i in range(self.max_t)],
-                             y0=self.init_conditions)
+                             y0=self.init_conditions,
+                             events=lambda t, y, e, r: -1 if not self.done else 1,
+                             args=[env, render])
         if self.sol.y.shape[1] != self.max_t:
             raise RuntimeError("Integration failed: {}".format(self.sol.y.shape))
 
@@ -172,6 +191,7 @@ class SignalingLattice(Lattice):
         image = self._fill_canvas()
         fourcc = cv2.VideoWriter_fourcc(*'MP4V')
         renderer = cv2.VideoWriter(video_name, fourcc, 20, (image.shape[1], image.shape[0]))
+        print(self.sol.y.min(), self.sol.y.max())
         for t in range(self.max_t - 1):
             for _, d in self._lattice.nodes(data=True):
                 if d["row"] == self.h - 1:
@@ -266,7 +286,7 @@ class ClockLattice(Lattice):
         ClockBacterium.alpha_e = params[0]
         ClockBacterium.alpha_o = params[1]
 
-    def solve(self, dt):
+    def solve(self):
         for i in range(self.max_t):
             self._grow(i=i)
             self._update_ages()

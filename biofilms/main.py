@@ -1,30 +1,32 @@
 import argparse
 import os
-import pickle
 from multiprocessing import Pool
 import random
 import time
 import logging
 
-from bacteria.lattice import Lattice
-
 import numpy as np
-import cv2
+import gym
+
+from bacteria.bacterium import SignalingBacterium
+from bacteria.lattice import Lattice
+from evo.evolution.algorithms import StochasticSolver
+from evo.evolution.objectives import ObjectiveDict
+from evo.listeners.listener import FileListener
 
 
 def parse_args():
     parser = argparse.ArgumentParser(prog="BiofilmSimulation", description="Simulate a B. subtilis biofilm")
     parser.add_argument("--s", type=int, default=0, help="seed")
-    parser.add_argument("--w", type=int, default=200, help="width in cells of the biofilm")
-    parser.add_argument("--h", type=int, default=35, help="height in cells of the biofilm")
+    parser.add_argument("--w", type=int, default=24, help="width in cells of the biofilm")
+    parser.add_argument("--h", type=int, default=48, help="height in cells of the biofilm")
     parser.add_argument("--dt", type=float, default=0.02, help="integration step")
-    parser.add_argument("--t", type=int, default=1000, help="max simulation steps")
-    parser.add_argument("--p", type=str, default="signaling", help="problem")
     parser.add_argument("--np", type=int, default=1, help="parallel optimization processes")
     parser.add_argument("--solver", type=str, default="afpo", help="solver")
+    parser.add_argument("--task", type=str, default="bw", help="solver")
     parser.add_argument("--n_params", type=int, default=2, help="solution size")
-    parser.add_argument("--evals", type=int, default=2500, help="fitness evaluations")
-    parser.add_argument("--task", type=str, default="one", help="target pattern name")
+    parser.add_argument("--evals", type=int, default=5000, help="fitness evaluations")
+    parser.add_argument("--mode", type=str, default="random", help="work modality")
     return parser.parse_args()
 
 
@@ -62,125 +64,65 @@ def parallel_solve(solver, config, listener):
 
 def parallel_wrapper(arg):
     c, solution, i, video_name = arg
-    fitness = simulation(config=c, solution=solution, video_name=video_name)
+    fitness = simulation(config=c, solution=solution)
     print(i)
     return i, -fitness
 
 
-def simulation(config, solution, video_name):
-    world = Lattice.create_lattice(name=config.p, w=config.w, h=config.h, dt=config.dt, max_t=config.t, phi_c=0.43)
-    world.set_params(params=solution)
-    world.solve(dt=config.dt)
+def set_params(params):
+    SignalingBacterium.u_0 = params[0]
+    SignalingBacterium.tau = params[1]
+
+
+def simulation(config, solution, render=False, video_name=None):
+    env = gym.make("BipedalWalker-v3")
+    if render:
+        env = gym.wrappers.Monitor(env, "videos", force=True)
+    env.seed(config.s)
+    obs = env.reset()
+    set_params(params=solution)
+    world = Lattice.create_lattice(name="signaling",
+                                   w=config.w,
+                                   h=config.h,
+                                   dt=config.dt,
+                                   max_t=env.spec.max_episode_steps,
+                                   obs=obs)
+    world.solve(env=env, render=render)
+    env.close()
     if video_name is not None:
         world.render(video_name=video_name)
-    # fitness = world.get_fitness()
-    return 0.0  # fitness
-
-
-def compute_fitness_landscape(config, file_name, num_workers=8):
-    solutions = []
-    #for x in range(0, 100000, 2500):
-    #    for y in range(0, 300000, 2500):
-    for x in range(0, 40000, 1000):
-        for y in range(0, 200000, 1000):
-            solutions.append([x, y])
-    with Pool(num_workers) as pool:
-        results = pool.map(parallel_wrapper, [(config, solutions[i], i) for i in range(len(solutions))])
-    with open(file_name, "wb") as file:
-        pickle.dump(results, file)
-
-
-def sample_fitness_landscape(config, num_workers):
-    solutions = []
-    for x in range(0, 200000, 10000 * 2):
-        for y in range(0, 500000, 15000 * 2):
-            solutions.append([x, y])
-    with Pool(num_workers) as pool:
-        results = pool.map(parallel_wrapper, [(config, solutions[i], i, ".".join([str(i), str(solutions[i]), "mp4"]))
-                                              for i in range(len(solutions))])
-
-
-def make_arras(directory, num_x=10, num_y=17):
-    size_x, size_y = 2004, 2004
-    step_x, step_y = 10000 * 2, 15000 * 2
-    image = np.zeros((size_x * num_x, size_y * num_y, 3))
-    for n, file in enumerate(os.listdir(directory)):
-        if not file.endswith("mp4"):
-            continue
-        name = os.path.join(directory, file)
-        coords = file.split(".")[1].strip("[]").split(",")
-        raw_i = int(coords[0])
-        i = int((raw_i / step_x) * size_x)
-        raw_j = int(coords[1].strip(" "))
-        j = int((raw_j / step_y) * size_y)
-        if raw_j % step_y != 0 or raw_i % step_x != 0:
-            continue
-        cap = cv2.VideoCapture(name)
-        frame = np.zeros((size_x, size_y, 3))
-        while cap.isOpened():
-            ret, _ = cap.read()
-            if not ret:
-                break
-            else:
-                frame = _
-        image[i: i + size_x, j: j + size_y] = frame
-    min_val = np.min(image)
-    max_val = np.max(image)
-    print(min_val, max_val)
-    cv2.imwrite("arras.png", image)
-
-
-def create_pattern():
-    import matplotlib.pyplot as plt
-    target = np.load("targets/orig.npy")
-    new_target = np.zeros_like(target)
-    radii = []
-    for i in range(0, 100, 50):
-        radii.append(i)
-    center = np.array([new_target.shape[0] / 2, new_target.shape[1] / 2])
-    for i, radius in enumerate(radii):
-        for x in range(target.shape[0]):
-            for y in range(target.shape[1]):
-                if np.linalg.norm(np.array([x, y]) - center) > radius:
-                    continue
-                elif x == 100 and y == 100:
-                    continue
-                new_target[x, y] = target.max() if i % 2 == 0 else target.min()
-    plt.imshow(new_target)
-    plt.savefig("test.png")
-    # np.save("targets/one.npy", new_target)
+    return world.fitness
 
 
 if __name__ == "__main__":
     args = parse_args()
     set_seed(args.s)
-    # sample_fitness_landscape(config=args, num_workers=args.np)
-    # make_arras(".")
-    # file_name = ".".join([args.solver, str(args.s), "txt"])
-    # objectives_dict = ObjectiveDict()
-    # objectives_dict.add_objective(name="fitness", maximize=False, best_value=0.0, worst_value=5.0)
-    # listener = FileListener(file_name=file_name, header=["iteration", "elapsed.sec", "evaluations", "best.fitness",
-    #                                                      "best.solution"])
-    # solver = StochasticSolver.create_solver(name=args.solver,
-    #                                         seed=args.s,
-    #                                         num_params=args.n_params,
-    #                                         pop_size=100,
-    #                                         genotype_factory="uniform_float",
-    #                                         objectives_dict=objectives_dict,
-    #                                         offspring_size=100,
-    #                                         remap=False,
-    #                                         genetic_operators={"gaussian_mut": 1.0},
-    #                                         genotype_filter=None,
-    #                                         tournament_size=5,
-    #                                         mu=0.0,
-    #                                         sigma=5000,
-    #                                         n=args.n_params,
-    #                                         range=(0, 1000000),
-    #                                         upper=1000000,
-    #                                         lower=0)
-    # best = parallel_solve(solver=solver, config=args, listener=listener)
-    # logging.warning("fitness score at this local optimum: {}".format(best[1]))
-    # best = [float(x) for x in open(FileListener.get_log_file_name(file_name), "r").readlines()[-1].split(";")[-1].strip().strip("[]").
-    #         split(" ")[1:]]
-    # orig: [20000, 100000], uneven: [90000, 100000], one: [100000, 800000]
-    print(simulation(config=args, solution=[20000, 100000], video_name="random.mp4"))  # ".".join([file_name, "video", "mp4"])))
+    file_name = os.path.join("output", ".".join([args.task, args.solver, str(args.s), "txt"]))
+    if args.mode == "random":
+        print(simulation(config=args, solution=[0.0, 300], render=True, video_name="random.mp4"))
+    elif args.mode == "opt":
+        objectives_dict = ObjectiveDict()
+        objectives_dict.add_objective(name="fitness", maximize=True, best_value=300.0, worst_value=-100)
+        listener = FileListener(file_name=file_name, header=["iteration", "elapsed.sec", "evaluations", "best.fitness",
+                                                             "best.solution"])
+        solver = StochasticSolver.create_solver(name=args.solver,
+                                                seed=args.s,
+                                                num_params=args.n_params,
+                                                pop_size=100,
+                                                genotype_factory="uniform_float",
+                                                objectives_dict=objectives_dict,
+                                                offspring_size=100,
+                                                remap=False,
+                                                genetic_operators={"gaussian_mut": 1.0},
+                                                genotype_filter=None,
+                                                tournament_size=5,
+                                                mu=0.0,
+                                                sigma=0.2,
+                                                n=args.n_params,
+                                                range=(-1, 1))
+        best = parallel_solve(solver=solver, config=args, listener=listener)
+        logging.warning("fitness score at this local optimum: {}".format(best[1]))
+        print(simulation(config=args, solution=best[0], render=True))
+    else:
+        best = [float(x) for x in open(file_name, "r").readlines()[-1].split(";")[-1].strip().split("/")]
+        print(simulation(config=args, solution=best, render=True))
