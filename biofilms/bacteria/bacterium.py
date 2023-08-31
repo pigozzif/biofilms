@@ -1,6 +1,5 @@
 import abc
 
-from scipy.integrate import quad
 import numpy as np
 
 
@@ -18,54 +17,32 @@ class Bacterium(abc.ABC):
         pass
 
 
-class SignallingBacterium(Bacterium):
-    epsilon = 10.0
-    u0 = 0.02
-    firing_threshold = 0.6
+class SignalingBacterium(Bacterium):
+    epsilon = 10
+    u_0 = 0.02
+    tau = 5
 
-    def __init__(self, idx, u_init, phi_c):
+    def __init__(self, idx):
         super().__init__(idx)
-        # self.ut = u_init
-        self.u_old = u_init
-        # self.firing = random.random() <= phi_c[0]
-        # self.ut = 1.0 if self.firing else 0.0
-        self.integral = 0.0
-        self.us = []
 
-    def _is_firing(self, ut):
-        return ut > self.firing_threshold
-
-    def _compute_t_prime(self):
-        return self.us[-1]
-
-    # @staticmethod
-    # def _compute_delta(lattice, t, dt):
-    #     tau = 300 if self.firing else 5
-    #     self.integral = dt * (quad(lambda x: self._compute_t_prime(x, dt), t - dt, t)[0] + self.integral)
-    #     messages = sum([lattice._get_coupling(self.idx, neigh["cell"].idx) * (neigh["cell"].u_old - self.ut)
-    #                     for neigh in lattice.get_neighborhood(self)])
-    #     if self.idx == 0:
-    #         print(round(t / dt), self.ut, self.firing, self.integral, messages)
-    #     return self.epsilon * (self.ut * (1 - self.ut) * (self.ut - self.u0) - self.integral / tau) + messages
-
-    # def propagate(self, lattice, t, dt):
-    #     du = dt * self._compute_delta(lattice=lattice, t=t, dt=dt)
-    #     self.ut += du
-    #     self.us.append(self.ut)
-    #     self.u_old = self.ut
-    #     self.firing = self._is_firing(self.u_old)
+    def _is_firing(self, u_t):
+        return u_t > self.u_0
 
     def propagate(self, lattice, t, dt, d):
         return
 
-    def FitzHughNagumo_percolate(self, t, y, lattice, dt):
-        self.us.append(y[self.idx])
-        tau = 300 if self._is_firing(ut=y[self.idx]) else 5
-        self.integral += quad(lambda x: self._compute_t_prime(), t - dt, t)[0]
-        messages = sum([lattice._get_coupling(self.idx, neigh["cell"].idx) * (y[neigh["cell"].idx] - y[self.idx])
-                        for neigh in lattice.get_neighborhood(self)])
-        dy = self.epsilon * (y[self.idx] * (1 - y[self.idx]) * (y[self.idx] - self.u0) - self.integral / tau) + messages
-        return dy
+    def FitzHughNagumo_percolate(self, t, y, lattice):
+        u_i, w_i = y[self.idx * 2], y[self.idx * 2 + 1]
+        tau = self.tau if self._is_firing(u_t=u_i) else self.tau / 60
+        messages = []
+        for neigh in lattice.get_neighborhood(self.idx):
+            if neigh["row"] == lattice.h - 1:
+                u_j = lattice.last_row_y[self.idx]
+            else:
+                u_j = y[neigh["cell"].idx * 2]
+            messages.append(lattice.get_coupling(self.idx, neigh["cell"].idx) * (u_j - u_i))
+        du = self.epsilon * (u_i * (1 - u_i) * (u_i - self.u_0) - w_i) + sum(messages)
+        return [du, u_i / tau]
 
     def draw(self, t, min_val, max_val):
         raise NotImplementedError
@@ -102,10 +79,8 @@ class ClockBacterium(Bacterium):
     eta = 2.0
     epsilon = 0.13
 
-    def __init__(self, idx, y, t, max_t):
+    def __init__(self, idx):
         super().__init__(idx)
-        self.y = np.zeros((max_t, len(y)))
-        self.y[t] = y
         self.is_frontier = True
         self.age = 0
 
@@ -132,7 +107,8 @@ class ClockBacterium(Bacterium):
 
     @staticmethod
     def update_F(s, q, f):
-        return ClockBacterium.alpha_f * ((s * q ** ClockBacterium.n1) / (ClockBacterium.kappa_f ** ClockBacterium.n1 + q ** ClockBacterium.n1)) -\
+        return ClockBacterium.alpha_f * ((s * q ** ClockBacterium.n1) / (
+                ClockBacterium.kappa_f ** ClockBacterium.n1 + q ** ClockBacterium.n1)) - \
                ClockBacterium.beta_f * f
 
     @staticmethod
@@ -142,7 +118,8 @@ class ClockBacterium(Bacterium):
     @staticmethod
     def update_A(t, a):
         return ClockBacterium.alpha_a * (
-                (ClockBacterium.kappa_t ** ClockBacterium.n2) / (ClockBacterium.kappa_t ** ClockBacterium.n2 + t ** ClockBacterium.n2)) - ClockBacterium.beta_a * a
+                (ClockBacterium.kappa_t ** ClockBacterium.n2) / (
+                ClockBacterium.kappa_t ** ClockBacterium.n2 + t ** ClockBacterium.n2)) - ClockBacterium.beta_a * a
 
     @staticmethod
     def update_R(t, r):
@@ -154,13 +131,7 @@ class ClockBacterium(Bacterium):
         return ClockBacterium.eta
 
     def propagate(self, lattice, t, dt, d):
-        if self.is_frontier:
-            dy = ClockBacterium.NasA_oscIII_D(t=t, y=self.y[t - 1])
-        else:
-            dy = ClockBacterium.NasA_oscIII_eta(t=t, y=self.y[t - 1])
-        dy[5] += lattice.diffuse(i=t, cell=d, idx=5)
-        dy[7] += lattice.diffuse(i=t, cell=d, idx=7)
-        self.y[t] = self.y[t - 1] + dt * dy
+        return
 
     @staticmethod
     def _deltas(y):
@@ -179,8 +150,8 @@ class ClockBacterium(Bacterium):
     @staticmethod
     def NasA_oscIII_D(t, y):
         dy = ClockBacterium._deltas(y=y)
-        dy[: -1] *= ClockBacterium.epsilon
-        return dy
+        dy *= ClockBacterium.epsilon
+        return dy[: -1]
 
     @staticmethod
     def NasA_oscIII_eta(t, y):
@@ -188,7 +159,7 @@ class ClockBacterium(Bacterium):
         dy[: -1] *= (ClockBacterium.epsilon / (1.0 + y[9]))
         return dy
 
-    def draw(self, t, min_val, max_val):
+    def draw(self, val, min_val, max_val):
         import matplotlib.pyplot as plt
-        c = plt.cm.Greens((self.y[t, 8] - min_val) / (max_val - min_val))
+        c = plt.cm.Greens((val - min_val) / (max_val - min_val))
         return c[0] * 255.0, c[1] * 255.0, c[2] * 255.0
