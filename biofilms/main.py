@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument("--dt", type=float, default=0.2, help="integration step")
     parser.add_argument("--np", type=int, default=1, help="parallel optimization processes")
     parser.add_argument("--solver", type=str, default="afpo", help="solver")
-    parser.add_argument("--task", type=str, default="bw", help="solver")
+    parser.add_argument("--task", type=str, default="pend", help="solver")
     parser.add_argument("--n_params", type=int, default=2, help="solution size")
     parser.add_argument("--evals", type=int, default=5000, help="fitness evaluations")
     parser.add_argument("--mode", type=str, default="random", help="work modality")

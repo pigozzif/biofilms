@@ -29,7 +29,7 @@ class SignalingBacterium(Bacterium):
         return
 
     def FitzHughNagumo_percolate(self, t, y, lattice, row, col):
-        if col == 0:
+        if col == 0 and t % 1 == 0:
             obs = lattice.obs[int((row * len(lattice.obs)) / lattice.h)]
             tau = self.tau if obs > self.u_0 else self.tau / 60
             return [obs - y[self.idx * 2], y[self.idx * 2] / tau]

@@ -171,7 +171,7 @@ class SignalingLattice(Lattice):
             self.obs[-1] /= 8.0
             # self.obs += 1.0
             # self.obs /= 2.0
-            for i in range(int(1 / self.dt)):
+            for i in range(round(1 / self.dt)):
                 dy = self._propagate(t=t + i * self.dt, y=y)
                 y += self.dt * dy
             self.episode(y=y, env=env, render=render)
