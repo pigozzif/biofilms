@@ -42,7 +42,6 @@ class SignalingBacterium(Bacterium):
                 u_j = y[neigh["cell"].idx * 2]
             messages.append(lattice.get_coupling(self.idx, neigh["cell"].idx) * (u_j - u_i))
         du = self.epsilon * (u_i * (1 - u_i) * (u_i - self.u_0) - w_i) + sum(messages)
-        # du = u_i - (u_i ** 3) / 3 - w_i + sum(messages)
         return [du, u_i / tau]
 
     def draw(self, t, min_val, max_val):

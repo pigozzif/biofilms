@@ -106,42 +106,4 @@ if __name__ == "__main__":
     # best = [float(x) for x in open(FileListener.get_log_file_name(file_name), "r").readlines()[-1].split(";")[-1].strip().strip("[]").
     #         split(" ")[1:]]
     # orig: [20000, 100000], uneven: [90000, 100000], one: [100000, 800000]
-    print(simulation(config=args, solution=[20000, 100000], video_name="signaling.mp4"))  # ".".join([file_name, "video", "mp4"])))
-    exit()
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from scipy.integrate import solve_ivp
-
-    def fitzhugh_nagumo(t, y, tau):
-        v, w = y
-        dvdt = (v - (v ** 3) / 3) * (v - 0.01) - w
-        dwdt = v / tau
-        return [dvdt, dwdt]
-    tau = 5
-
-    # Initial conditions
-    v0 = 1.0
-    w0 = 0.0
-    y0 = [v0, w0]
-
-    # Time span for simulation
-    t_span = (0, 50)
-
-    # Perform the simulation using solve_ivp
-    t_eval = [i * args.dt for i in range(args.t)]
-    solution = solve_ivp(
-        fitzhugh_nagumo,
-        t_span=[0.0, args.t * args.dt],
-        t_eval=t_eval,
-        y0=y0,
-        args=[tau]
-    )
-
-    # Plot the results
-    plt.plot(t_eval, solution.y[0], label='v')
-    plt.plot(t_eval, solution.y[1], label='w')
-    plt.xlabel('Time')
-    plt.ylabel('Variables')
-    plt.title('FitzHugh-Nagumo Model')
-    plt.legend()
-    plt.show()
+    print(simulation(config=args, solution=[20000, 100000], video_name="random.mp4"))  # ".".join([file_name, "video", "mp4"])))

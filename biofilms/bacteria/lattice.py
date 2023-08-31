@@ -147,7 +147,6 @@ class SignalingLattice(Lattice):
         return 0.5 if j == i + 1 or j == i - 1 else 0.25
 
     def _propagate(self, t, y):
-        print(t)
         dy = np.array([d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self)
                        for _, d in self._lattice.nodes(data=True) if not self._is_boundary(d=d)]).ravel()
         for node, d in self._lattice.nodes(data=True):
@@ -162,13 +161,6 @@ class SignalingLattice(Lattice):
                              y0=self.init_conditions)
         if self.sol.y.shape[1] != self.max_t:
             raise RuntimeError("Integration failed: {}".format(self.sol.y.shape))
-        for _, d in self._lattice.nodes(data=True):
-            if d["i"] == 0:
-                import matplotlib.pyplot as plt
-                plt.plot([np.count_nonzero(self.sol.y[::2, t] > SignalingBacterium.u_0) / (self.sol.y.shape[0] / 2)
-                          for t in range(self.max_t)], label="% firing")
-                plt.legend()
-                plt.savefig("pulses.png")
 
     def _draw_cell(self, image, d, c, t):
         cv2.ellipse(image, (int(d["cx"] * self.magnify), int(d["cy"] * self.magnify)),
@@ -180,7 +172,6 @@ class SignalingLattice(Lattice):
         image = self._fill_canvas()
         fourcc = cv2.VideoWriter_fourcc(*'MP4V')
         renderer = cv2.VideoWriter(video_name, fourcc, 20, (image.shape[1], image.shape[0]))
-        print(self.sol.y.min(), self.sol.y.max())
         for t in range(self.max_t - 1):
             for _, d in self._lattice.nodes(data=True):
                 if d["row"] == self.h - 1:
