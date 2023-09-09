@@ -7,6 +7,7 @@ import numpy as np
 import cv2
 import networkx as nx
 from scipy.integrate import solve_ivp
+import gym
 
 from bacteria.bacterium import SignalingBacterium, ClockBacterium
 
@@ -75,6 +76,7 @@ class Lattice(abc.ABC):
 
 class SignalingLattice(Lattice):
     cell_width = 2.0
+    delta_T = 1
 
     def __init__(self, w, h, dt, max_t, obs):
         super().__init__(w, h, dt, max_t, lambda x, y: x % 2 == 0)
@@ -141,9 +143,15 @@ class SignalingLattice(Lattice):
     def _propagate(self, t, y):
         dy = np.zeros_like(y)
         for node, d in self._lattice.nodes(data=True):
-            du = d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self, row=d["row"], col=d["col"])
-            dy[node * 2] = du[0]
-            dy[node * 2 + 1] = du[1]
+            if d["col"] == 0:
+                y[node * 2] = self.obs[int((d["row"] * len(self.obs)) / self.h)]
+                dy[node * 2] = 0.0
+                dy[node * 2 + 1] = 0.0
+        for node, d in self._lattice.nodes(data=True):
+            if d["col"] != 0:
+                du = d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self, row=d["row"], col=d["col"])
+                dy[node * 2] = du[0]
+                dy[node * 2 + 1] = du[1]
         return dy
 
     def _act(self, n, y):
@@ -154,28 +162,37 @@ class SignalingLattice(Lattice):
         return action / (self.h / n)
 
     def episode(self, y, env, render):
-        action = self._act(n=env.action_space.shape[0], y=y)
-        self.obs, reward, self.done, _ = env.step(np.clip(action,
-                                                          a_min=env.action_space.low,
-                                                          a_max=env.action_space.high))
+        if isinstance(env.action_space, gym.spaces.discrete.Discrete):
+            action = self._act(n=1, y=y)
+            action = 0 if action <= 0.5 else 1
+        else:
+            action = self._act(n=env.action_space.shape[0], y=y)
+            action = np.clip(action, a_min=env.action_space.low, a_max=env.action_space.high)
+        self.obs, reward, self.done, _ = env.step(action)
         self.fitness += reward
-        if self.done:
-            _ = env.reset()
         if render:
             env.render()
 
     def solve(self, env, render):
         self.obs = env.reset()
         y = self.init_conditions
+        observation_high = np.array([1, 1, 0.8])  # np.array([4.8, 5.0, 0.42, 5.0])
+        # [3.14, 5., 5., 5., 3.14, 5., 3.14, 5., 5., 3.14, 5., 3.14, 5., 5., 1., 1., 1., 1., 1., 1.,
+        # 1., 1., 1., 1.])
+        observation_low = np.array([-1, -1, -0.8])  # np.array([-4.8, -5.0, -0.42, -5.0])
+        # [-3.14, -5., -5., -5., -3.14, -5., -3.14, -5., -0., -3.14, -5., -3.14, -5., -0., -1., -1.,
+        # -1., -1., -1., -1., -1., -1., -1., -1.])
         for t in range(self.max_t):
-            self.obs[-1] /= 8.0
-            # self.obs += 1.0
-            # self.obs /= 2.0
-            for i in range(round(1 / self.dt)):
+            self.obs = np.clip(self.obs, a_min=observation_low, a_max=observation_high)
+            self.obs /= (observation_high - observation_low) / 2
+            for i in range(round(1 / self.dt * self.w)):
                 dy = self._propagate(t=t + i * self.dt, y=y)
                 y += self.dt * dy
             self.episode(y=y, env=env, render=render)
             self.sol[t] = y
+            if self.done:
+                _ = env.reset()
+                return
 
     def _draw_cell(self, image, d, c, t):
         cv2.ellipse(image, (int(d["cx"] * self.magnify), int(d["cy"] * self.magnify)),
