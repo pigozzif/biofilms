@@ -20,15 +20,15 @@ class Bacterium(abc.ABC):
 class SignalingBacterium(Bacterium):
     epsilon = 10
     u_0 = 0.02
-    tau = 5
 
-    def __init__(self, idx):
+    def __init__(self, idx, tau=5):
         super().__init__(idx)
+        self.tau = tau
 
     def propagate(self, lattice, t, dt, d):
         return
 
-    def FitzHughNagumo_percolate(self, t, y, lattice, row, col):
+    def FitzHughNagumo_percolate(self, t, y, lattice):
         u_i, w_i = y[self.idx * 2], y[self.idx * 2 + 1]
         tau = self.tau if u_i > self.u_0 else self.tau / 60
         messages = []

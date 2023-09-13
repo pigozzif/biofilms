@@ -25,7 +25,7 @@ def parse_args():
     parser.add_argument("--np", type=int, default=7, help="parallel optimization processes")
     parser.add_argument("--solver", type=str, default="afpo", help="solver")
     parser.add_argument("--task", type=str, default="pend", help="solver")
-    parser.add_argument("--n_params", type=int, default=2, help="solution size")
+    parser.add_argument("--n_params", type=int, default=12, help="solution size")
     parser.add_argument("--evals", type=int, default=150000, help="fitness evaluations")
     parser.add_argument("--mode", type=str, default="random", help="work modality")
     return parser.parse_args()
@@ -70,9 +70,10 @@ def parallel_wrapper(arg):
     return i, fitness
 
 
-def set_params(params):
-    SignalingBacterium.u_0 = params[0]
-    SignalingBacterium.tau = params[1] * 100
+def set_params(params, lattice):
+    # SignalingBacterium.u_0 = params[0]
+    for param, (node, d) in zip(params, lattice.nodes(data=True)):
+        d["cell"].tau = param * 100
 
 
 def simulation(config, solution, render=False, video_name=None):
@@ -81,13 +82,13 @@ def simulation(config, solution, render=False, video_name=None):
         env = gym.wrappers.Monitor(env, "videos", force=True)
     env.seed(config.s)
     obs = env.reset()
-    set_params(params=solution)
     world = Lattice.create_lattice(name="signaling",
                                    w=config.w,
                                    h=len(obs) * 2,
                                    dt=config.dt,
                                    max_t=env.spec.max_episode_steps,
                                    obs=obs)
+    set_params(params=solution, lattice=world.get_lattice())
     world.solve(env=env, render=render)
     env.close()
     if video_name is not None:

@@ -149,7 +149,7 @@ class SignalingLattice(Lattice):
                 dy[node * 2 + 1] = 0.0
         for node, d in self._lattice.nodes(data=True):
             if d["col"] != 0:
-                du = d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self, row=d["row"], col=d["col"])
+                du = d["cell"].FitzHughNagumo_percolate(t=t, y=y, lattice=self)
                 dy[node * 2] = du[0]
                 dy[node * 2 + 1] = du[1]
         return dy
