@@ -3,10 +3,9 @@ import os
 import pickle
 from multiprocessing import Pool
 import random
-import time
 import logging
 
-from bacteria.lattice import Lattice
+from bacteria.lattice import Lattice, ClockLattice
 
 import numpy as np
 import cv2

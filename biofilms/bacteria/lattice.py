@@ -136,7 +136,7 @@ class ClockLattice(Lattice):
     def solve(self):
         for t in range(self.max_t):
             # 1) metabolism
-            self.tree = cKDTree([(cell.cx, cell.cy) for cell in self.frontier], leafsize=10)
+            self.tree = cKDTree([(cell.cx, cell.cy) for cell in self.frontier], leafsize=50)
             self._metabolize(t=t)
             # 2) grow
             self._grow()
