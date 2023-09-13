@@ -1,5 +1,6 @@
 import abc
 import os
+import random
 
 import numpy as np
 import cv2
@@ -21,8 +22,8 @@ class Lattice(abc.ABC):
         self.cells = []
         if video_name is not None:
             fourcc = cv2.VideoWriter_fourcc(*'MP4V')
-            self.renderer = cv2.VideoWriter(video_name, fourcc, 20, (int(self.h * self.magnify),
-                                                                     int(self.w * self.magnify)))
+            self.renderer = cv2.VideoWriter(video_name, fourcc, 20, (round(self.h * self.magnify),
+                                                                     round(self.w * self.magnify)))
         else:
             self.renderer = None
 
@@ -42,8 +43,8 @@ class Lattice(abc.ABC):
 
     def _fill_canvas(self):
         return np.full(
-            shape=(int(self.h * self.magnify),
-                   int(self.w * self.magnify),
+            shape=(round(self.h * self.magnify),
+                   round(self.w * self.magnify),
                    3),
             fill_value=255, dtype=np.uint8)
 
@@ -65,28 +66,51 @@ class Lattice(abc.ABC):
 class ClockLattice(Lattice):
     D = 0.5
     init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1]
+    moore_offsets = [
+        (-1, -1), (-1, 0), (-1, 1),
+        (0, -1), (0, 1),
+        (1, -1), (1, 0), (1, 1)
+    ]
 
     def __init__(self, w, h, dt, max_t, video_name):
         super().__init__(w, h, dt, max_t, video_name)
-        self.cells.append(ClockBacterium(idx=0,
-                                         cx=self.get_center()[0],
-                                         cy=self.get_center()[1],
-                                         init_y=self.init_conditions))
+        seed = ClockBacterium(idx=0, cx=self.get_center()[0], cy=self.get_center()[1], init_y=self.init_conditions)
+        self.cells.append(seed)
+        self.frontier = [seed]
+        self.pos = np.zeros((self.h, self.w))
+        self.pos[round(seed.cx), round(seed.cy)] = 1
         self.idx = 1  # TODO: property
 
     # def diffuse(self, i, cell, idx):  # TODO: IS DIFFUSION AMONG BACTERIA ONLY?
     #     return - self.D * sum([cell["cell"].y[i - 1, idx] - n["cell"].y[i - 1, idx]
     #                            for n in self.get_neighborhood(cell=cell) if n["cell"] is not None])
 
-    # def _select_parent(self, cell):
-    #     return random.choice([d for d in self.get_neighborhood(cell=cell) if d["cell"] is not None])
-
     def _metabolize(self, t):
         for cell in self.cells:
             cell.propagate(t=t, dt=self.dt)
 
-    def _grow(self, i):
-        pass
+    def _grow(self, t):
+        for parent_cell in self.frontier:
+            neighborhood = self._get_neighborhood(round(parent_cell.cx), round(parent_cell.cy))
+            if neighborhood:
+                self.cells.append(ClockBacterium(idx=self.idx,
+                                                  cx=parent_cell.cx,
+                                                  cy=parent_cell.cy,
+                                                  init_y=parent_cell.y))
+                cx, cy = random.choice(neighborhood)
+                parent_cell.cx = cx
+                parent_cell.cy = cy
+                self.idx += 1
+                self.pos[cx, cy] += 1
+
+    def _get_neighborhood(self, row, col):
+        return [(row + dy, col + dx) for dx, dy in self.moore_offsets if
+                0 <= row + dy <= self.h - 1 and 0 <= col + dx <= self.w - 1 and self.pos[row + dy, col + dx] == 0]
+
+    def _update_pos(self):
+        self.pos.fill(0)
+        for cell in self.cells:
+            self.pos[round(cell.cx), round(cell.cy)] += 1
 
     def _update_ages(self):
         for cell in self.cells:
@@ -100,34 +124,39 @@ class ClockLattice(Lattice):
         for t in range(self.max_t):
             # 1) metabolism
             self._metabolize(t=t)
+            # 2) grow
+            self._grow(t=t)
+            # 3) update positions
+            self._update_pos()
             if self.renderer is not None:
                 self.render()
 
     def _draw_cell(self, cell, image, min_val, max_val):
         cv2.rectangle(image,
-                      (int((cell.cx - self.cell_width / 2) * self.magnify),
-                       int((cell.cy - self.cell_height / 2) * self.magnify)),
-                      (int((cell.cx + self.cell_width / 2) * self.magnify),
-                       int((cell.cy + self.cell_height / 2) * self.magnify)),
-                      color=cell.draw(min_val=min_val, max_val=max_val),
+                      (round((cell.cx - self.cell_width / 2) * self.magnify),
+                       round((cell.cy - self.cell_height / 2) * self.magnify)),
+                      (round((cell.cx + self.cell_width / 2) * self.magnify),
+                       round((cell.cy + self.cell_height / 2) * self.magnify)),
+                      color=0.0,  # cell.draw(min_val=min_val, max_val=max_val),
                       thickness=-1)
 
     def render(self):
         min_val = 0.0
-        max_val = 2.0
+        max_val = 0.0
         image = self._fill_canvas()
+        # print(np.max(self.pos), np.min(self.pos))
         for cell in self.cells:
             self._draw_cell(image=image, cell=cell, min_val=min_val, max_val=max_val)
         cv2.putText(image,
                     text="Min response: {}".format(round(min_val, 3)),
-                    org=(int((self.w - 50) * self.magnify), int(10 * self.magnify)),
+                    org=(round((self.w - 50) * self.magnify), round(10 * self.magnify)),
                     fontFace=cv2.FONT_HERSHEY_COMPLEX,
                     fontScale=1,
                     color=(0, 0, 0),
                     thickness=2)
         cv2.putText(image,
                     text="Max response: {}".format(round(max_val, 3)),
-                    org=(int((self.w - 50) * self.magnify), int(15 * self.magnify)),
+                    org=(round((self.w - 50) * self.magnify), round(15 * self.magnify)),
                     fontFace=cv2.FONT_HERSHEY_COMPLEX,
                     fontScale=1,
                     color=(0, 0, 0),
@@ -138,6 +167,6 @@ class ClockLattice(Lattice):
         target = np.load(os.path.join("targets", self.task + ".npy"))
         prediction = np.zeros_like(target)
         for cell in self.cells:
-            prediction[int(cell.cx), int(cell.cy)] = cell.y[8]
+            prediction[round(cell.cx), round(cell.cy)] = cell.y[8]
         # np.save("targets/one.npy", prediction)
         return np.sqrt(np.concatenate(np.square(prediction - target)).sum())

@@ -103,7 +103,11 @@ class ClockBacterium(Bacterium):
         return ClockBacterium.eta
 
     def propagate(self, t, **kwargs):
-        self.y += kwargs["dt"] * self.NasA_oscIII_D(t=t, y=self.y)
+        dt = kwargs["dt"]
+        if self.is_frontier:
+            self.y += dt * self.NasA_oscIII_D(t=t, y=self.y)
+        else:
+            self.y += dt * self.NasA_oscIII_eta(t=t, y=self.y)
 
     @staticmethod
     def _deltas(y):
