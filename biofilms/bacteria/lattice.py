@@ -68,7 +68,6 @@ class ClockLattice(Lattice):
 
     def __init__(self, w, h, dt, max_t, video_name):
         super().__init__(w, h, dt, max_t, video_name)
-        self.sols = []
         self.cells.append(ClockBacterium(idx=0,
                                          cx=self.get_center()[0],
                                          cy=self.get_center()[1],
@@ -82,9 +81,9 @@ class ClockLattice(Lattice):
     # def _select_parent(self, cell):
     #     return random.choice([d for d in self.get_neighborhood(cell=cell) if d["cell"] is not None])
 
-    def _metabolize(self, i):
+    def _metabolize(self, t):
         for cell in self.cells:
-            cell.propagate(lattice=self, t=i, dt=self.dt)
+            cell.propagate(t=t, dt=self.dt)
 
     def _grow(self, i):
         pass
@@ -99,6 +98,8 @@ class ClockLattice(Lattice):
 
     def solve(self):
         for t in range(self.max_t):
+            # 1) metabolism
+            self._metabolize(t=t)
             if self.renderer is not None:
                 self.render()
 
@@ -112,8 +113,8 @@ class ClockLattice(Lattice):
                       thickness=-1)
 
     def render(self):
-        min_val = min([cell.y[8] for cell in self.cells])
-        max_val = max([cell.y[8] for cell in self.cells])
+        min_val = 0.0
+        max_val = 2.0
         image = self._fill_canvas()
         for cell in self.cells:
             self._draw_cell(image=image, cell=cell, min_val=min_val, max_val=max_val)

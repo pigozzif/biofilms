@@ -17,7 +17,7 @@ def parse_args():
     parser.add_argument("--s", type=int, default=0, help="seed")
     parser.add_argument("--w", type=int, default=201, help="width in cells of the biofilm")
     parser.add_argument("--h", type=int, default=201, help="height in cells of the biofilm")
-    parser.add_argument("--dt", type=float, default=0.02, help="integration step")
+    parser.add_argument("--dt", type=float, default=0.3, help="integration step")
     parser.add_argument("--t", type=int, default=100, help="max simulation steps")
     parser.add_argument("--p", type=str, default="clock", help="problem")
     parser.add_argument("--np", type=int, default=1, help="parallel optimization processes")

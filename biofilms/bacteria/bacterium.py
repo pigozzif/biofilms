@@ -11,7 +11,7 @@ class Bacterium(abc.ABC):
         self.cy = cy
 
     @abc.abstractmethod
-    def propagate(self, lattice, t, dt, d):
+    def propagate(self, t, **kwargs):
         pass
 
     @abc.abstractmethod
@@ -102,8 +102,8 @@ class ClockBacterium(Bacterium):
     def update_W():
         return ClockBacterium.eta
 
-    def propagate(self, lattice, t, dt, d):
-        return
+    def propagate(self, t, **kwargs):
+        self.y += kwargs["dt"] * self.NasA_oscIII_D(t=t, y=self.y)
 
     @staticmethod
     def _deltas(y):
@@ -133,5 +133,5 @@ class ClockBacterium(Bacterium):
 
     def draw(self, min_val, max_val):
         import matplotlib.pyplot as plt
-        c = (0.0, 0.0, 0.0)#plt.cm.Greens((self.y[8] - min_val) / (max_val - min_val))
+        c = plt.cm.Greens((self.y[8] - min_val) / (max_val - min_val))
         return c[0] * 255.0, c[1] * 255.0, c[2] * 255.0
