@@ -80,15 +80,24 @@ class ClockLattice(Lattice):
         self.frontier = [seed]
         self.pos = np.zeros((self.h, self.w))
         self.pos[round(seed.cx), round(seed.cy)] = 1
-        self.idx = 1  # TODO: property
-        self.tree = None
+        self._idx = 0
+        self._tree = None
+
+    @property
+    def idx(self):
+        self._idx += 1
+        return self._idx
+
+    @idx.setter
+    def idx(self, value):
+        self._idx = value
 
     # def diffuse(self, i, cell, idx):  # TODO: IS DIFFUSION AMONG BACTERIA ONLY?
     #     return - self.D * sum([cell["cell"].y[i - 1, idx] - n["cell"].y[i - 1, idx]
     #                            for n in self.get_neighborhood(cell=cell) if n["cell"] is not None])
 
     def _metabolize(self, t):
-        distances, _ = self.tree.query([(cell.cx, cell.cy) for cell in self.cells], k=1, p=2)
+        distances, _ = self._tree.query([(cell.cx, cell.cy) for cell in self.cells], k=1, p=2)
         for cell, d in zip(self.cells, distances):
             cell.propagate(t=t, dt=self.dt, k=d)
 
@@ -136,7 +145,7 @@ class ClockLattice(Lattice):
     def solve(self):
         for t in range(self.max_t):
             # 1) metabolism
-            self.tree = cKDTree([(cell.cx, cell.cy) for cell in self.frontier], leafsize=50)
+            self._tree = cKDTree([(cell.cx, cell.cy) for cell in self.frontier], leafsize=50)
             self._metabolize(t=t)
             # 2) grow
             self._grow()
