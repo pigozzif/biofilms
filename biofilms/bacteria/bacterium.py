@@ -107,7 +107,7 @@ class ClockBacterium(Bacterium):
         if self.is_frontier:
             self.y += dt * self.NasA_oscIII_D(t=t, y=self.y)
         else:
-            self.y += dt * self.NasA_oscIII_eta(t=t, y=self.y)
+            self.y += dt * self.NasA_oscIII_eta(t=t, y=self.y, k=kwargs["k"])
 
     @staticmethod
     def _deltas(y):
@@ -126,13 +126,13 @@ class ClockBacterium(Bacterium):
     @staticmethod
     def NasA_oscIII_D(t, y):
         dy = ClockBacterium._deltas(y=y)
-        dy *= ClockBacterium.epsilon
-        return dy[: -1]
+        dy[: -1] *= ClockBacterium.epsilon
+        return dy
 
     @staticmethod
-    def NasA_oscIII_eta(t, y):
+    def NasA_oscIII_eta(t, y, k):
         dy = ClockBacterium._deltas(y=y)
-        dy[: -1] *= (ClockBacterium.epsilon / (1.0 + y[9]))
+        dy[: -1] *= (ClockBacterium.epsilon / (1.0 + ClockBacterium.eta * k))
         return dy
 
     def draw(self, min_val, max_val):

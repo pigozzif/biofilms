@@ -4,6 +4,7 @@ import random
 
 import numpy as np
 import cv2
+from scipy.spatial import cKDTree
 
 from bacteria.bacterium import ClockBacterium
 
@@ -65,7 +66,7 @@ class Lattice(abc.ABC):
 
 class ClockLattice(Lattice):
     D = 0.5
-    init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1]
+    init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1, 0.0]
     moore_offsets = [
         (-1, -1), (-1, 0), (-1, 1),
         (0, -1), (0, 1),
@@ -80,23 +81,26 @@ class ClockLattice(Lattice):
         self.pos = np.zeros((self.h, self.w))
         self.pos[round(seed.cx), round(seed.cy)] = 1
         self.idx = 1  # TODO: property
+        self.tree = None
 
     # def diffuse(self, i, cell, idx):  # TODO: IS DIFFUSION AMONG BACTERIA ONLY?
     #     return - self.D * sum([cell["cell"].y[i - 1, idx] - n["cell"].y[i - 1, idx]
     #                            for n in self.get_neighborhood(cell=cell) if n["cell"] is not None])
 
     def _metabolize(self, t):
-        for cell in self.cells:
-            cell.propagate(t=t, dt=self.dt)
+        distances, _ = self.tree.query([(cell.cx, cell.cy) for cell in self.cells], k=1, p=2)
+        for cell, d in zip(self.cells, distances):
+            cell.propagate(t=t, dt=self.dt, k=d)
 
-    def _grow(self, t):
+    def _grow(self):
         for parent_cell in self.frontier:
-            neighborhood = self._get_neighborhood(round(parent_cell.cx), round(parent_cell.cy))
+            neighborhood = [(x, y) for x, y in self._get_neighborhood(round(parent_cell.cx), round(parent_cell.cy))
+                            if self.pos[x, y] == 0]
             if neighborhood:
                 self.cells.append(ClockBacterium(idx=self.idx,
-                                                  cx=parent_cell.cx,
-                                                  cy=parent_cell.cy,
-                                                  init_y=parent_cell.y))
+                                                 cx=parent_cell.cx,
+                                                 cy=parent_cell.cy,
+                                                 init_y=parent_cell.y))
                 cx, cy = random.choice(neighborhood)
                 parent_cell.cx = cx
                 parent_cell.cy = cy
@@ -105,12 +109,21 @@ class ClockLattice(Lattice):
 
     def _get_neighborhood(self, row, col):
         return [(row + dy, col + dx) for dx, dy in self.moore_offsets if
-                0 <= row + dy <= self.h - 1 and 0 <= col + dx <= self.w - 1 and self.pos[row + dy, col + dx] == 0]
+                0 <= row + dy <= self.h - 1 and 0 <= col + dx <= self.w - 1]
 
     def _update_pos(self):
         self.pos.fill(0)
         for cell in self.cells:
             self.pos[round(cell.cx), round(cell.cy)] += 1
+
+    def _update_frontier(self):
+        self.frontier.clear()
+        for cell in self.cells:
+            if sum(1 for x, y in self._get_neighborhood(round(cell.cx), round(cell.cy)) if self.pos[x, y] == 0) > 1:
+                self.frontier.append(cell)
+                cell.is_frontier = True
+            else:
+                cell.is_frontier = False
 
     def _update_ages(self):
         for cell in self.cells:
@@ -123,11 +136,14 @@ class ClockLattice(Lattice):
     def solve(self):
         for t in range(self.max_t):
             # 1) metabolism
+            self.tree = cKDTree([(cell.cx, cell.cy) for cell in self.frontier], leafsize=10)
             self._metabolize(t=t)
             # 2) grow
-            self._grow(t=t)
+            self._grow()
             # 3) update positions
             self._update_pos()
+            # 4) update frontier
+            self._update_frontier()
             if self.renderer is not None:
                 self.render()
 
@@ -137,14 +153,13 @@ class ClockLattice(Lattice):
                        round((cell.cy - self.cell_height / 2) * self.magnify)),
                       (round((cell.cx + self.cell_width / 2) * self.magnify),
                        round((cell.cy + self.cell_height / 2) * self.magnify)),
-                      color=0.0,  # cell.draw(min_val=min_val, max_val=max_val),
+                      color=self.tree.query((cell.cx, cell.cy), k=1, p=2)[0] / 85 * 255,#cell.draw(min_val=min_val, max_val=max_val),
                       thickness=-1)
 
     def render(self):
         min_val = 0.0
-        max_val = 0.0
+        max_val = 100
         image = self._fill_canvas()
-        # print(np.max(self.pos), np.min(self.pos))
         for cell in self.cells:
             self._draw_cell(image=image, cell=cell, min_val=min_val, max_val=max_val)
         cv2.putText(image,
