@@ -15,16 +15,15 @@ import cv2
 def parse_args():
     parser = argparse.ArgumentParser(prog="BiofilmSimulation", description="Simulate a B. subtilis biofilm")
     parser.add_argument("--s", type=int, default=0, help="seed")
-    parser.add_argument("--w", type=int, default=200, help="width in cells of the biofilm")
-    parser.add_argument("--h", type=int, default=35, help="height in cells of the biofilm")
+    parser.add_argument("--w", type=int, default=201, help="width in cells of the biofilm")
+    parser.add_argument("--h", type=int, default=201, help="height in cells of the biofilm")
     parser.add_argument("--dt", type=float, default=0.02, help="integration step")
-    parser.add_argument("--t", type=int, default=1000, help="max simulation steps")
-    parser.add_argument("--p", type=str, default="signaling", help="problem")
+    parser.add_argument("--t", type=int, default=100, help="max simulation steps")
+    parser.add_argument("--p", type=str, default="clock", help="problem")
     parser.add_argument("--np", type=int, default=1, help="parallel optimization processes")
     parser.add_argument("--solver", type=str, default="afpo", help="solver")
     parser.add_argument("--n_params", type=int, default=2, help="solution size")
     parser.add_argument("--evals", type=int, default=2500, help="fitness evaluations")
-    parser.add_argument("--task", type=str, default="one", help="target pattern name")
     return parser.parse_args()
 
 
@@ -61,18 +60,21 @@ def parallel_solve(solver, config, listener):
 
 
 def parallel_wrapper(arg):
-    c, solution, i, video_name = arg
-    fitness = simulation(config=c, solution=solution, video_name=video_name)
+    c, solution, i = arg
+    fitness = simulation(config=c, solution=solution, video_name=None)
     print(i)
     return i, -fitness
 
 
 def simulation(config, solution, video_name):
-    world = Lattice.create_lattice(name=config.p, w=config.w, h=config.h, dt=config.dt, max_t=config.t, phi_c=0.43)
+    world = Lattice.create_lattice(name=config.p,
+                                   w=config.w,
+                                   h=config.h,
+                                   dt=config.dt,
+                                   max_t=config.t,
+                                   video_name=video_name)
     world.set_params(params=solution)
-    world.solve(dt=config.dt)
-    if video_name is not None:
-        world.render(video_name=video_name)
+    world.solve()
     # fitness = world.get_fitness()
     return 0.0  # fitness
 

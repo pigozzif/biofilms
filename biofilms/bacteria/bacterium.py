@@ -5,47 +5,18 @@ import numpy as np
 
 class Bacterium(abc.ABC):
 
-    def __init__(self, idx):
+    def __init__(self, idx, cx, cy):
         self.idx = idx
+        self.cx = cx
+        self.cy = cy
 
     @abc.abstractmethod
     def propagate(self, lattice, t, dt, d):
         pass
 
     @abc.abstractmethod
-    def draw(self, t, min_val, max_val):
+    def draw(self, min_val, max_val):
         pass
-
-
-class SignalingBacterium(Bacterium):
-    epsilon = 10
-    u_0 = 0.02
-    tau = 5
-
-    def __init__(self, idx):
-        super().__init__(idx)
-
-    def _is_firing(self, u_t):
-        return u_t > self.u_0
-
-    def propagate(self, lattice, t, dt, d):
-        return
-
-    def FitzHughNagumo_percolate(self, t, y, lattice):
-        u_i, w_i = y[self.idx * 2], y[self.idx * 2 + 1]
-        tau = self.tau if self._is_firing(u_t=u_i) else self.tau / 60
-        messages = []
-        for neigh in lattice.get_neighborhood(self.idx):
-            if neigh["row"] == lattice.h - 1:
-                u_j = lattice.last_row_y[self.idx]
-            else:
-                u_j = y[neigh["cell"].idx * 2]
-            messages.append(lattice.get_coupling(self.idx, neigh["cell"].idx) * (u_j - u_i))
-        du = self.epsilon * (u_i * (1 - u_i) * (u_i - self.u_0) - w_i) + sum(messages)
-        return [du, u_i / tau]
-
-    def draw(self, t, min_val, max_val):
-        raise NotImplementedError
 
 
 class ClockBacterium(Bacterium):
@@ -79,8 +50,9 @@ class ClockBacterium(Bacterium):
     eta = 2.0
     epsilon = 0.13
 
-    def __init__(self, idx):
-        super().__init__(idx)
+    def __init__(self, idx, cx, cy, init_y):
+        super().__init__(idx, cx, cy)
+        self.y = init_y
         self.is_frontier = True
         self.age = 0
 
@@ -159,7 +131,7 @@ class ClockBacterium(Bacterium):
         dy[: -1] *= (ClockBacterium.epsilon / (1.0 + y[9]))
         return dy
 
-    def draw(self, val, min_val, max_val):
+    def draw(self, min_val, max_val):
         import matplotlib.pyplot as plt
-        c = plt.cm.Greens((val - min_val) / (max_val - min_val))
+        c = (0.0, 0.0, 0.0)#plt.cm.Greens((self.y[8] - min_val) / (max_val - min_val))
         return c[0] * 255.0, c[1] * 255.0, c[2] * 255.0
