@@ -5,6 +5,7 @@ import random
 import numpy as np
 import cv2
 from scipy.spatial import cKDTree
+from scipy.signal import convolve2d
 
 from bacteria.bacterium import ClockBacterium
 
@@ -65,7 +66,7 @@ class Lattice(abc.ABC):
 
 
 class ClockLattice(Lattice):
-    D = 0.5
+    D = 0.0075
     init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1]
     moore_offsets = [
         (-1, -1), (-1, 0), (-1, 1),
@@ -80,6 +81,7 @@ class ClockLattice(Lattice):
         self.frontier = [seed]
         self.pos = np.zeros((self.h, self.w))
         self.pos[round(seed.cx), round(seed.cy)] = 1
+        self.diffusion = np.zeros((self.h, self.w, 2))
         self._idx = 0
         self._tree = None
 
@@ -92,14 +94,26 @@ class ClockLattice(Lattice):
     def idx(self, value):
         self._idx = value
 
-    # def diffuse(self, i, cell, idx):  # TODO: IS DIFFUSION AMONG BACTERIA ONLY?
-    #     return - self.D * sum([cell["cell"].y[i - 1, idx] - n["cell"].y[i - 1, idx]
-    #                            for n in self.get_neighborhood(cell=cell) if n["cell"] is not None])
-
     def _metabolize(self, t):
+        self.diffusion.fill(0)
         distances, _ = self._tree.query([(cell.cx, cell.cy) for cell in self.cells], k=1, p=2)
         for cell, d in zip(self.cells, distances):
             cell.propagate(t=t, dt=self.dt, k=d)
+            self.diffusion[round(cell.cx), round(cell.cy), :] += cell.y[5]
+            self.diffusion[round(cell.cx), round(cell.cy), :] += cell.y[7]
+
+    def _diffuse(self):
+        gradient_1 = self.dt * convolve2d(self.diffusion[:, :, 0], np.array([[self.D / 2, self.D, self.D / 2],
+                                                                             [self.D, 0, self.D],
+                                                                             [self.D / 2, self.D, self.D / 2]]),
+                                          mode="same")
+        gradient_2 = self.dt * convolve2d(self.diffusion[:, :, 1], np.array([[self.D / 2, self.D, self.D / 2],
+                                                                             [self.D, 0, self.D],
+                                                                             [self.D / 2, self.D, self.D / 2]]),
+                                          mode="same")
+        for cell in self.cells:
+            cell.y[5] += gradient_1[round(cell.cx), round(cell.cy)]
+            cell.y[7] += gradient_2[round(cell.cx), round(cell.cy)]
 
     def _grow(self):
         for parent_cell in self.frontier:
@@ -147,13 +161,15 @@ class ClockLattice(Lattice):
             # 1) metabolism
             self._tree = cKDTree([(cell.cx, cell.cy) for cell in self.frontier], leafsize=50)
             self._metabolize(t=t)
+            # 1.b) diffuse
+            self._diffuse()
             # 2) grow
             self._grow()
             # 3) update positions
             self._update_pos()
             # 4) update frontier
             self._update_frontier()
-            self._update_ages()
+            # self._update_ages()
             # 5) render
             if self.renderer is not None:
                 self.render()

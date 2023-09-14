@@ -80,7 +80,7 @@ def simulation(config, solution, video_name):
 
 def compute_fitness_landscape(config, file_name, num_workers=8):
     solutions = []
-    #for x in range(0, 100000, 2500):
+    # for x in range(0, 100000, 2500):
     #    for y in range(0, 300000, 2500):
     for x in range(0, 40000, 1000):
         for y in range(0, 200000, 1000):
@@ -184,4 +184,4 @@ if __name__ == "__main__":
     # best = [float(x) for x in open(FileListener.get_log_file_name(file_name), "r").readlines()[-1].split(";")[-1].strip().strip("[]").
     #         split(" ")[1:]]
     # orig: [20000, 100000], uneven: [90000, 100000], one: [100000, 800000]
-    print(simulation(config=args, solution=[20000, 100000], video_name="random.mp4"))  # ".".join([file_name, "video", "mp4"])))
+    print(simulation(config=args, solution=[20000, 100000], video_name="random.mp4"))
