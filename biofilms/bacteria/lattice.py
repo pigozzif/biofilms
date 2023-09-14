@@ -64,7 +64,8 @@ class Lattice(abc.ABC):
 
 
 class ClockLattice(Lattice):
-    D = 0.0075
+    D = 0.0  # 075
+    friction = 0.0
     init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1]
     moore_offsets = [
         (-1, -1), (-1, 0), (-1, 1),
@@ -74,7 +75,11 @@ class ClockLattice(Lattice):
 
     def __init__(self, w, h, dt, max_t, video_name):
         super().__init__(w, h, dt, max_t, video_name)
-        seed = ClockBacterium(idx=0, cx=self.get_center()[0], cy=self.get_center()[1], init_y=self.init_conditions)
+        seed = ClockBacterium(idx=0,
+                              cx=self.get_center()[0],
+                              cy=self.get_center()[1],
+                              vel=np.zeros(2),
+                              init_y=self.init_conditions)
         self.cells.append(seed)
         self.frontier = [seed]
         self.pos = np.zeros((self.h, self.w))
@@ -121,6 +126,7 @@ class ClockLattice(Lattice):
                 self.cells.append(ClockBacterium(idx=self.idx,
                                                  cx=parent_cell.cx,
                                                  cy=parent_cell.cy,
+                                                 vel=np.zeros(2),
                                                  init_y=parent_cell.y.copy()))
                 cx, cy = random.choice(neighborhood)
                 parent_cell.cx = cx
@@ -135,6 +141,7 @@ class ClockLattice(Lattice):
     def _update_pos(self):
         self.pos.fill(0)
         for cell in self.cells:
+            cell.move(dt=self.dt, k=self.friction)
             self.pos[round(cell.cx), round(cell.cy)] += 1
 
     def _update_frontier(self):

@@ -5,10 +5,16 @@ import numpy as np
 
 class Bacterium(abc.ABC):
 
-    def __init__(self, idx, cx, cy):
+    def __init__(self, idx, cx, cy, vel):
         self.idx = idx
         self.cx = cx
         self.cy = cy
+        self.vel = vel
+
+    def move(self, dt, k):
+        self.cx += self.vel[0] * dt
+        self.cy += self.vel[1] * dt
+        self.vel -= k * self.vel * dt
 
     @abc.abstractmethod
     def propagate(self, t, **kwargs):
@@ -50,8 +56,8 @@ class ClockBacterium(Bacterium):
     eta = 2.0
     epsilon = 0.13
 
-    def __init__(self, idx, cx, cy, init_y):
-        super().__init__(idx, cx, cy)
+    def __init__(self, idx, cx, cy, vel, init_y):
+        super().__init__(idx, cx, cy, vel)
         self.y = init_y
         self.age = 0
 
