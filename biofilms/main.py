@@ -5,7 +5,7 @@ from multiprocessing import Pool
 import random
 import logging
 
-from bacteria.lattice import Lattice, ClockLattice
+from bacteria.lattice import Lattice
 
 import numpy as np
 import cv2

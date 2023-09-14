@@ -66,7 +66,7 @@ class Lattice(abc.ABC):
 
 class ClockLattice(Lattice):
     D = 0.5
-    init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1, 0.0]
+    init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1]
     moore_offsets = [
         (-1, -1), (-1, 0), (-1, 1),
         (0, -1), (0, 1),
@@ -109,7 +109,7 @@ class ClockLattice(Lattice):
                 self.cells.append(ClockBacterium(idx=self.idx,
                                                  cx=parent_cell.cx,
                                                  cy=parent_cell.cy,
-                                                 init_y=parent_cell.y))
+                                                 init_y=parent_cell.y.copy()))
                 cx, cy = random.choice(neighborhood)
                 parent_cell.cx = cx
                 parent_cell.cy = cy
@@ -153,6 +153,8 @@ class ClockLattice(Lattice):
             self._update_pos()
             # 4) update frontier
             self._update_frontier()
+            self._update_ages()
+            # 5) render
             if self.renderer is not None:
                 self.render()
 
@@ -162,12 +164,12 @@ class ClockLattice(Lattice):
                        round((cell.cy - self.cell_height / 2) * self.magnify)),
                       (round((cell.cx + self.cell_width / 2) * self.magnify),
                        round((cell.cy + self.cell_height / 2) * self.magnify)),
-                      color=self.tree.query((cell.cx, cell.cy), k=1, p=2)[0] / 85 * 255,#cell.draw(min_val=min_val, max_val=max_val),
+                      color=cell.draw(min_val=min_val, max_val=max_val),
                       thickness=-1)
 
     def render(self):
         min_val = 0.0
-        max_val = 100
+        max_val = 1.5
         image = self._fill_canvas()
         for cell in self.cells:
             self._draw_cell(image=image, cell=cell, min_val=min_val, max_val=max_val)

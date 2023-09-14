@@ -103,11 +103,8 @@ class ClockBacterium(Bacterium):
         return ClockBacterium.eta
 
     def propagate(self, t, **kwargs):
-        dt = kwargs["dt"]
-        if self.is_frontier:
-            self.y += dt * self.NasA_oscIII_D(t=t, y=self.y)
-        else:
-            self.y += dt * self.NasA_oscIII_eta(t=t, y=self.y, k=kwargs["k"])
+        dt, k = kwargs["dt"], kwargs["k"]
+        self.y += dt * self.NasA_oscIII_eta(t=t, y=self.y, k=k)
 
     @staticmethod
     def _deltas(y):
@@ -119,20 +116,19 @@ class ClockBacterium(Bacterium):
                          ClockBacterium.update_E(e=y[5], a=y[3], o=y[7], q=y[0], s=y[4], n=y[6]),
                          ClockBacterium.update_N(e=y[5], s=y[4], n=y[6]),
                          ClockBacterium.update_O(e=y[5], a=y[3], o=y[7], q=y[0]),
-                         ClockBacterium.update_R(t=y[2], r=y[8]),
-                         ClockBacterium.update_W()
+                         ClockBacterium.update_R(t=y[2], r=y[8])
                          ])
 
     @staticmethod
     def NasA_oscIII_D(t, y):
         dy = ClockBacterium._deltas(y=y)
-        dy[: -1] *= ClockBacterium.epsilon
+        dy *= ClockBacterium.epsilon
         return dy
 
     @staticmethod
     def NasA_oscIII_eta(t, y, k):
         dy = ClockBacterium._deltas(y=y)
-        dy[: -1] *= (ClockBacterium.epsilon / (1.0 + ClockBacterium.eta * k))
+        dy *= (ClockBacterium.epsilon / (1.0 + ClockBacterium.eta * k))
         return dy
 
     def draw(self, min_val, max_val):
