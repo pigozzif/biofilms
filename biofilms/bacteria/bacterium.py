@@ -53,7 +53,6 @@ class ClockBacterium(Bacterium):
     def __init__(self, idx, cx, cy, init_y):
         super().__init__(idx, cx, cy)
         self.y = init_y
-        self.is_frontier = True
         self.age = 0
 
     @staticmethod

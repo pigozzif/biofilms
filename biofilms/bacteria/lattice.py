@@ -144,9 +144,6 @@ class ClockLattice(Lattice):
         for cell in self.cells:
             if sum(1 for x, y in self._get_neighborhood(round(cell.cx), round(cell.cy)) if self.pos[x, y] == 0) > 1:
                 self.frontier.append(cell)
-                cell.is_frontier = True
-            else:
-                cell.is_frontier = False
 
     def _update_ages(self):
         for cell in self.cells:
