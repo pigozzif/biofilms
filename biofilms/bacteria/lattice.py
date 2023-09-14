@@ -23,9 +23,10 @@ class Lattice(abc.ABC):
         self.max_t = max_t
         self.cells = []
         if video_name is not None:
+            self.image = self._fill_canvas()
             fourcc = cv2.VideoWriter_fourcc(*'MP4V')
-            self.renderer = cv2.VideoWriter(video_name, fourcc, 20, (round(self.h * self.magnify),
-                                                                     round(self.w * self.magnify)))
+            self.renderer = cv2.VideoWriter(video_name, fourcc, 20, (self.image.shape[1],
+                                                                     self.image.shape[0]))
         else:
             self.renderer = None
 
@@ -35,9 +36,6 @@ class Lattice(abc.ABC):
 
     def get_center(self):
         return self.w // 2, self.h // 2
-
-    def should_step(self, dt):
-        return self.t <= self.max_t * dt
 
     @abc.abstractmethod
     def solve(self):
@@ -183,24 +181,24 @@ class ClockLattice(Lattice):
     def render(self):
         min_val = 0.0
         max_val = 1.5
-        image = self._fill_canvas()
+        self.image.fill(255)
         for cell in self.cells:
-            self._draw_cell(image=image, cell=cell, min_val=min_val, max_val=max_val)
-        cv2.putText(image,
+            self._draw_cell(image=self.image, cell=cell, min_val=min_val, max_val=max_val)
+        cv2.putText(self.image,
                     text="Min response: {}".format(round(min_val, 3)),
                     org=(round((self.w - 50) * self.magnify), round(10 * self.magnify)),
                     fontFace=cv2.FONT_HERSHEY_COMPLEX,
                     fontScale=1,
                     color=(0, 0, 0),
                     thickness=2)
-        cv2.putText(image,
+        cv2.putText(self.image,
                     text="Max response: {}".format(round(max_val, 3)),
                     org=(round((self.w - 50) * self.magnify), round(15 * self.magnify)),
                     fontFace=cv2.FONT_HERSHEY_COMPLEX,
                     fontScale=1,
                     color=(0, 0, 0),
                     thickness=2)
-        self.renderer.write(image)
+        self.renderer.write(self.image)
 
     def get_fitness(self):
         target = np.load(os.path.join("targets", self.task + ".npy"))
