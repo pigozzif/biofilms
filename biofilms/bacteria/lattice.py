@@ -64,9 +64,9 @@ class Lattice(abc.ABC):
 
 
 class ClockLattice(Lattice):
-    D = 0.0  # 075
-    friction = 0
-    init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1]
+    D = 0.005
+    friction = 3.0
+    init_conditions = np.array([0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1])
     moore_offsets = [
         (-1, -1), (-1, 0), (-1, 1),
         (0, -1), (0, 1),
@@ -83,7 +83,7 @@ class ClockLattice(Lattice):
         self.cells.append(seed)
         self.frontier = [seed]
         self.pos = np.zeros((self.h, self.w))
-        self.pos[round(seed.cx), round(seed.cy)] = 1
+        self.pos[seed.row, seed.col] = 1
         self.diffusion = np.zeros((self.h, self.w, 2))
         self.diffusion_kernel = np.array([[self.D / 2, self.D, self.D / 2],
                                           [self.D, 0, self.D],
@@ -102,34 +102,33 @@ class ClockLattice(Lattice):
 
     def _metabolize(self, t):
         self.diffusion.fill(0)
-        distances, _ = self._tree.query([(cell.cx, cell.cy) for cell in self.cells], k=1, p=2)
-        for cell, d in zip(self.cells, distances):
+        dists, _ = self._tree.query([(cell.cx, cell.cy) for cell in self.cells], k=1, p=2)
+        for cell, d in zip(self.cells, dists):
             cell.propagate(t=t, dt=self.dt, k=d)
-            self.diffusion[round(cell.cx), round(cell.cy), :] += cell.y[5]
-            self.diffusion[round(cell.cx), round(cell.cy), :] += cell.y[7]
+            self.diffusion[cell.row, cell.col, :] += cell.y[5]
+            self.diffusion[cell.row, cell.col, :] += cell.y[7]
 
     def _diffuse(self):
         gradient_1 = self.dt * convolve2d(self.diffusion[:, :, 0], self.diffusion_kernel, mode="same")
         gradient_2 = self.dt * convolve2d(self.diffusion[:, :, 1], self.diffusion_kernel, mode="same")
         for cell in self.cells:
-            cell.y[5] += gradient_1[round(cell.cx), round(cell.cy)]
-            cell.y[7] += gradient_2[round(cell.cx), round(cell.cy)]
+            cell.y[5] += gradient_1[cell.row, cell.col]
+            cell.y[7] += gradient_2[cell.row, cell.col]
 
     def _grow(self):
         for parent_cell in self.frontier:
-            neighborhood = [(x, y) for x, y in self._get_neighborhood(round(parent_cell.cx), round(parent_cell.cy))
+            neighborhood = [(x, y) for x, y in self._get_neighborhood(parent_cell.row, parent_cell.col)
                             if self.pos[x, y] == 0]
             if neighborhood:
                 self.cells.append(ClockBacterium(idx=self.idx,
                                                  cx=parent_cell.cx,
                                                  cy=parent_cell.cy,
-                                                 vel=parent_cell.vel.copy(),
+                                                 vel=np.random.random(2),
                                                  init_y=parent_cell.y.copy()))
                 cx, cy = random.choice(neighborhood)
                 parent_cell.cx = cx
                 parent_cell.cy = cy
-                self.idx += 1
-                self.pos[cx, cy] += 1
+                self.pos[parent_cell.row, parent_cell.col] += 1
 
     def _get_neighborhood(self, row, col):
         return [(row + dy, col + dx) for dx, dy in self.moore_offsets if
@@ -139,12 +138,12 @@ class ClockLattice(Lattice):
         self.pos.fill(0)
         for cell in self.cells:
             cell.move(dt=self.dt, k=self.friction)
-            self.pos[round(cell.cx), round(cell.cy)] += 1
+            self.pos[cell.row, cell.col] += 1
 
     def _update_frontier(self):
         self.frontier.clear()
         for cell in self.cells:
-            if sum(1 for x, y in self._get_neighborhood(round(cell.cx), round(cell.cy)) if self.pos[x, y] == 0) > 1:
+            if sum(1 for x, y in self._get_neighborhood(cell.row, cell.col) if self.pos[x, y] == 0) > 1:
                 self.frontier.append(cell)
 
     def _update_ages(self):
@@ -157,6 +156,7 @@ class ClockLattice(Lattice):
 
     def solve(self):
         for t in range(self.max_t):
+            # print(t, len(self.cells))
             # 1) metabolism
             self._tree = cKDTree([(cell.cx, cell.cy) for cell in self.frontier], leafsize=50)
             self._metabolize(t=t)

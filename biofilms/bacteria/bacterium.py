@@ -7,13 +7,33 @@ class Bacterium(abc.ABC):
 
     def __init__(self, idx, cx, cy, vel):
         self.idx = idx
-        self.cx = cx
-        self.cy = cy
+        self._cx = cx
+        self._cy = cy
+        self.row = round(self._cx)
+        self.col = round(self._cy)
         self.vel = vel
 
+    @property
+    def cx(self):
+        return self._cx
+
+    @cx.setter
+    def cx(self, value):
+        self._cx = value
+        self.row = round(self._cx)
+
+    @property
+    def cy(self):
+        return self._cy
+
+    @cy.setter
+    def cy(self, value):
+        self._cy = value
+        self.col = round(self._cy)
+
     def move(self, dt, k):
-        self.cx += self.vel[0] * dt
-        self.cy += self.vel[1] * dt
+        self._cx += self.vel[0] * dt
+        self._cy += self.vel[1] * dt
         self.vel -= k * self.vel * dt
 
     @abc.abstractmethod
@@ -109,10 +129,10 @@ class ClockBacterium(Bacterium):
 
     def propagate(self, t, **kwargs):
         dt, k = kwargs["dt"], kwargs["k"]
-        self.y += dt * self.NasA_oscIII_eta(t=t, y=self.y, k=k)
+        self.y += dt * self.NasA_oscIII_eta(y=self.y, t=t, k=k)
 
     @staticmethod
-    def _deltas(y):
+    def deltas(y):
         return np.array([ClockBacterium.update_Q(s=y[4], e=y[5], n=y[6], a=y[3], o=y[7], q=y[0]),
                          ClockBacterium.update_F(s=y[4], q=y[0], f=y[1]),
                          ClockBacterium.update_T(t=y[2], f=y[1]),
@@ -125,14 +145,14 @@ class ClockBacterium(Bacterium):
                          ])
 
     @staticmethod
-    def NasA_oscIII_D(t, y):
-        dy = ClockBacterium._deltas(y=y)
+    def NasA_oscIII_D(y, t):
+        dy = ClockBacterium.deltas(y=y)
         dy *= ClockBacterium.epsilon
         return dy
 
     @staticmethod
-    def NasA_oscIII_eta(t, y, k):
-        dy = ClockBacterium._deltas(y=y)
+    def NasA_oscIII_eta(y, t, k):
+        dy = ClockBacterium.deltas(y=y)
         dy *= (ClockBacterium.epsilon / (1.0 + ClockBacterium.eta * k))
         return dy
 

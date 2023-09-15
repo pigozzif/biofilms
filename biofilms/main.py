@@ -183,5 +183,14 @@ if __name__ == "__main__":
     # logging.warning("fitness score at this local optimum: {}".format(best[1]))
     # best = [float(x) for x in open(FileListener.get_log_file_name(file_name), "r").readlines()[-1].split(";")[-1].strip().strip("[]").
     #         split(" ")[1:]]
-    # orig: [20000, 100000], uneven: [90000, 100000], one: [100000, 800000]
+    # 41.07383632659912 ± 0.3074971987242349
     print(simulation(config=args, solution=[20000, 100000], video_name="random.mp4"))
+    exit()
+    import time
+    times = []
+    for i in range(10):
+        set_seed(i)
+        start = time.time()
+        simulation(config=args, solution=[20000, 100000], video_name=None)
+        times.append(time.time() - start)
+    print(np.median(times), "±", np.std(times))
