@@ -65,7 +65,7 @@ class Lattice(abc.ABC):
 
 class ClockLattice(Lattice):
     D = 0.0  # 075
-    friction = 0.0
+    friction = 0
     init_conditions = [0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1]
     moore_offsets = [
         (-1, -1), (-1, 0), (-1, 1),
@@ -85,6 +85,9 @@ class ClockLattice(Lattice):
         self.pos = np.zeros((self.h, self.w))
         self.pos[round(seed.cx), round(seed.cy)] = 1
         self.diffusion = np.zeros((self.h, self.w, 2))
+        self.diffusion_kernel = np.array([[self.D / 2, self.D, self.D / 2],
+                                          [self.D, 0, self.D],
+                                          [self.D / 2, self.D, self.D / 2]])
         self._idx = 0
         self._tree = None
 
@@ -106,14 +109,8 @@ class ClockLattice(Lattice):
             self.diffusion[round(cell.cx), round(cell.cy), :] += cell.y[7]
 
     def _diffuse(self):
-        gradient_1 = self.dt * convolve2d(self.diffusion[:, :, 0], np.array([[self.D / 2, self.D, self.D / 2],
-                                                                             [self.D, 0, self.D],
-                                                                             [self.D / 2, self.D, self.D / 2]]),
-                                          mode="same")
-        gradient_2 = self.dt * convolve2d(self.diffusion[:, :, 1], np.array([[self.D / 2, self.D, self.D / 2],
-                                                                             [self.D, 0, self.D],
-                                                                             [self.D / 2, self.D, self.D / 2]]),
-                                          mode="same")
+        gradient_1 = self.dt * convolve2d(self.diffusion[:, :, 0], self.diffusion_kernel, mode="same")
+        gradient_2 = self.dt * convolve2d(self.diffusion[:, :, 1], self.diffusion_kernel, mode="same")
         for cell in self.cells:
             cell.y[5] += gradient_1[round(cell.cx), round(cell.cy)]
             cell.y[7] += gradient_2[round(cell.cx), round(cell.cy)]
@@ -126,7 +123,7 @@ class ClockLattice(Lattice):
                 self.cells.append(ClockBacterium(idx=self.idx,
                                                  cx=parent_cell.cx,
                                                  cy=parent_cell.cy,
-                                                 vel=np.zeros(2),
+                                                 vel=parent_cell.vel.copy(),
                                                  init_y=parent_cell.y.copy()))
                 cx, cy = random.choice(neighborhood)
                 parent_cell.cx = cx
