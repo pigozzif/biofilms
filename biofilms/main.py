@@ -184,6 +184,8 @@ if __name__ == "__main__":
     # best = [float(x) for x in open(FileListener.get_log_file_name(file_name), "r").readlines()[-1].split(";")[-1].strip().strip("[]").
     #         split(" ")[1:]]
     # 41.07383632659912 ± 0.3074971987242349
+    # 29.66873347759247 ± 0.26987235562151174
+    # 27.248690128326416 ± 0.2814969384013431 (probably lower)
     print(simulation(config=args, solution=[20000, 100000], video_name="random.mp4"))
     exit()
     import time

@@ -76,9 +76,8 @@ class ClockBacterium(Bacterium):
     eta = 2.0
     epsilon = 0.13
 
-    def __init__(self, idx, cx, cy, vel, init_y):
+    def __init__(self, idx, cx, cy, vel):
         super().__init__(idx, cx, cy, vel)
-        self.y = init_y
         self.age = 0
 
     @staticmethod
