@@ -186,6 +186,7 @@ if __name__ == "__main__":
     # 41.07383632659912 ± 0.3074971987242349
     # 29.66873347759247 ± 0.26987235562151174
     # 27.248690128326416 ± 0.2814969384013431 (probably lower)
+    # 24.963476419448853 ± 0.3185027572083022 (indeed)
     print(simulation(config=args, solution=[20000, 100000], video_name="random.mp4"))
     exit()
     import time
