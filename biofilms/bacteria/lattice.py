@@ -66,7 +66,7 @@ class Lattice(abc.ABC):
 
 class ClockLattice(Lattice):
     D = 0.005
-    friction = 1.0
+    friction = 3.0
     init_conditions = np.array([0.6 * 1000.0, 0.7, 0.1, 2.0, 10.0, 90.0 * 1000.0, 1.0 * 1000.0, 10.0 * 1000.0, 0.1])
     moore_offsets = [
         (-1, -1), (-1, 0), (-1, 1),
@@ -79,7 +79,8 @@ class ClockLattice(Lattice):
         seed = ClockBacterium(idx=0,
                               cx=self.get_center()[0],
                               cy=self.get_center()[1],
-                              vel=np.zeros(2))
+                              vel=np.zeros(2),
+                              parent=-1)
         self.cells.append(seed)
         self.frontier = [seed]
         self.pos = np.zeros((self.h, self.w))
@@ -104,12 +105,12 @@ class ClockLattice(Lattice):
 
     def _metabolize(self, t):
         self.diffusion.fill(0)
-        dists, _ = self._tree.query([(cell.cx, cell.cy) for cell in self.cells], k=1, p=2)
+        dists, _ = self._tree.query([[cell.cx, cell.cy] for cell in self.cells], k=1, p=2)
         self.y += self.dt * np.multiply(np.apply_along_axis(ClockBacterium.deltas, 1, self.y),
                                         (ClockBacterium.epsilon / (1.0 + ClockBacterium.eta * dists))[:, np.newaxis])
         for cell, d in zip(self.cells, dists):
-            self.diffusion[cell.row, cell.col, :] += self.y[cell.idx, 5]
-            self.diffusion[cell.row, cell.col, :] += self.y[cell.idx, 7]
+            self.diffusion[cell.row, cell.col, 0] += self.y[cell.idx, 5]
+            self.diffusion[cell.row, cell.col, 1] += self.y[cell.idx, 7]
 
     def _diffuse(self):
         gradient_1 = self.dt * convolve2d(self.diffusion[:, :, 0], self.diffusion_kernel, mode="same")
@@ -126,12 +127,13 @@ class ClockLattice(Lattice):
                 self._new_cells.append(ClockBacterium(idx=self.idx,
                                                       cx=parent_cell.cx,
                                                       cy=parent_cell.cy,
-                                                      vel=np.random.random(2)))
+                                                      vel=np.random.random(2),
+                                                      parent=parent_cell.idx))
                 cx, cy = random.choice(neighborhood)
                 parent_cell.cx = cx
                 parent_cell.cy = cy
                 self.pos[parent_cell.row, parent_cell.col] += 1
-        self.y = np.vstack([self.y] + [cell.y for cell in self._new_cells])
+        self.y = np.vstack([self.y] + [self.y[cell.parent] for cell in self._new_cells])
         self.cells.extend(self._new_cells)
         self._new_cells.clear()
 
@@ -160,9 +162,9 @@ class ClockLattice(Lattice):
         ClockBacterium.alpha_o = params[1]
 
     def step(self, t):
-        # print(t)
+        print(t)
         # 1) metabolism
-        self._tree = cKDTree([(cell.cx, cell.cy) for cell in self.frontier], leafsize=50)
+        self._tree = cKDTree([[cell.cx, cell.cy] for cell in self.frontier], leafsize=50)
         self._metabolize(t=t)
         # 1.b) diffuse
         self._diffuse()
@@ -193,7 +195,7 @@ class ClockLattice(Lattice):
                        round((cell.cy - self.cell_height / 2) * self.magnify)),
                       (round((cell.cx + self.cell_width / 2) * self.magnify),
                        round((cell.cy + self.cell_height / 2) * self.magnify)),
-                      color=(c[0] * 255.0, c[1] * 255.0, c[2] * 255.0),  # cell.draw(min_val=min_val, max_val=max_val),
+                      color=(c[0] * 255.0, c[1] * 255.0, c[2] * 255.0),
                       thickness=-1)
 
     def render(self):
