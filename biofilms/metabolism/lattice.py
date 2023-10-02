@@ -1,14 +1,12 @@
 import abc
 import os
-import random
 
 import numpy as np
 import cv2
 from scipy.spatial import cKDTree
 from scipy.signal import convolve2d
-from scipy.integrate import solve_ivp
 
-from bacteria.bacterium import ClockBacterium
+from metabolism.bacterium import ClockBacterium, MatrixProducing
 
 
 class Lattice(abc.ABC):
@@ -76,11 +74,11 @@ class ClockLattice(Lattice):
 
     def __init__(self, w, h, dt, max_t, video_name):
         super().__init__(w, h, dt, max_t, video_name)
-        seed = ClockBacterium(idx=0,
-                              cx=self.get_center()[0],
+        seed = ClockBacterium(cx=self.get_center()[0],
                               cy=self.get_center()[1],
                               vel=np.zeros(2),
-                              y=self.init_conditions.copy())
+                              y=self.init_conditions.copy(),
+                              specialization=MatrixProducing())
         self.cells.append(seed)
         self.frontier = [seed]
         self.pos = np.zeros((self.h, self.w))
@@ -89,23 +87,13 @@ class ClockLattice(Lattice):
         self.diffusion_kernel = np.array([[self.D / 2, self.D, self.D / 2],
                                           [self.D, 0, self.D],
                                           [self.D / 2, self.D, self.D / 2]])
-        self._idx = 0
         self._tree = None
-
-    @property
-    def idx(self):
-        self._idx += 1
-        return self._idx
-
-    @idx.setter
-    def idx(self, value):
-        self._idx = value
 
     def _metabolize(self, t):
         self.diffusion.fill(0)
         dists, _ = self._tree.query([[cell.cx, cell.cy] for cell in self.cells], k=1, p=2)
         for cell, d in zip(self.cells, dists):
-            cell.propagate(t=t, dt=self.dt, k=d)
+            cell.metabolize(t=t, dt=self.dt, k=d)
             self.diffusion[cell.row, cell.col, 0] += cell.y[5]
             self.diffusion[cell.row, cell.col, 1] += cell.y[7]
 
@@ -121,15 +109,10 @@ class ClockLattice(Lattice):
             neighborhood = [(x, y) for x, y in self._get_neighborhood(parent_cell.row, parent_cell.col)
                             if self.pos[x, y] == 0]
             if neighborhood:
-                self.cells.append(ClockBacterium(idx=self.idx,
-                                                 cx=parent_cell.cx,
-                                                 cy=parent_cell.cy,
-                                                 vel=np.random.random(2),
-                                                 y=parent_cell.y.copy()))
-                cx, cy = random.choice(neighborhood)
-                parent_cell.cx = cx
-                parent_cell.cy = cy
-                self.pos[parent_cell.row, parent_cell.col] += 1
+                child = parent_cell.specialization.divide(parent=parent_cell, neighborhood=neighborhood)
+                if child is not None:  # TODO: fix OOP
+                    self.cells.append(child)
+                    self.pos[parent_cell.row, parent_cell.col] += 1
 
     def _get_neighborhood(self, row, col):
         return [(row + dy, col + dx) for dx, dy in self.moore_offsets if
@@ -161,7 +144,7 @@ class ClockLattice(Lattice):
         self._tree = cKDTree([[cell.cx, cell.cy] for cell in self.frontier], leafsize=50)
         self._metabolize(t=t)
         # 1.b) diffuse
-        self._diffuse()
+        # self._diffuse()
         # 2) grow
         self._grow()
         # 3) update positions

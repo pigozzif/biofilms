@@ -1,51 +1,50 @@
 import abc
+import random
 
 import numpy as np
 
 
-class Bacterium(abc.ABC):
-
-    def __init__(self, idx, cx, cy, vel):
-        self.idx = idx
-        self._cx = cx
-        self._cy = cy
-        self.row = round(self._cx)
-        self.col = round(self._cy)
-        self.vel = vel
-
-    @property
-    def cx(self):
-        return self._cx
-
-    @cx.setter
-    def cx(self, value):
-        self._cx = value
-        self.row = round(self._cx)
-
-    @property
-    def cy(self):
-        return self._cy
-
-    @cy.setter
-    def cy(self, value):
-        self._cy = value
-        self.col = round(self._cy)
-
-    def move(self, dt, k):
-        self._cx += self.vel[0] * dt
-        self._cy += self.vel[1] * dt
-        self.vel -= k * self.vel * dt
+class Specialization(abc.ABC):
 
     @abc.abstractmethod
-    def propagate(self, t, **kwargs):
+    def move(self, cx, cy, vel, dt, k):
         pass
 
     @abc.abstractmethod
-    def draw(self, min_val, max_val):
+    def divide(self, parent, neighborhood):
         pass
 
 
-class ClockBacterium(Bacterium):
+class SurfactinProducing(Specialization):
+
+    def move(self, cx, cy, vel, dt, k):
+        cx += vel[0] * dt
+        cy += vel[1] * dt
+        vel -= k * vel * dt
+        return cx, cy, vel
+
+    def divide(self, parent, neighborhood):
+        return
+
+
+class MatrixProducing(Specialization):
+
+    def move(self, cx, cy, vel, dt, k):
+        return cx, cy, vel
+
+    def divide(self, parent_cell, neighborhood):
+        child_cell = ClockBacterium(cx=parent_cell.cx,
+                                    cy=parent_cell.cy,
+                                    vel=np.random.random(2),
+                                    y=parent_cell.y.copy(),
+                                    specialization=MatrixProducing())
+        cx, cy = random.choice(neighborhood)
+        parent_cell.cx = cx
+        parent_cell.cy = cy
+        return child_cell
+
+
+class ClockBacterium(object):
     alpha_e = 2.0 * 1000 * 10.0  # 2.0
     gamma_e = 0.1
     alpha_n = 0.1
@@ -76,10 +75,47 @@ class ClockBacterium(Bacterium):
     eta = 2.0
     epsilon = 0.13
 
-    def __init__(self, idx, cx, cy, vel, y):
-        super().__init__(idx, cx, cy, vel)
+    def __init__(self, cx, cy, vel, y, specialization):
+        self._cx = cx
+        self._cy = cy
+        self.row = round(self._cx)
+        self.col = round(self._cy)
+        self.vel = vel
         self.y = y
+        self._specialization = specialization
         self.age = 0
+
+    @property
+    def cx(self):
+        return self._cx
+
+    @cx.setter
+    def cx(self, value):
+        self._cx = value
+        self.row = round(self._cx)
+
+    @property
+    def cy(self):
+        return self._cy
+
+    @cy.setter
+    def cy(self, value):
+        self._cy = value
+        self.col = round(self._cy)
+
+    @property
+    def specialization(self):
+        return self._specialization
+
+    @specialization.setter
+    def specialization(self, new_specialization):
+        self._specialization = new_specialization
+
+    def move(self, dt, k):
+        self._cx, self._cy, self.vel = self.specialization.move(self._cx, self._cy, self.vel, dt, k)
+
+    def divide(self, parent, neighborhood):
+        return self.specialization.divide(parent=parent, neighborhood=neighborhood)
 
     @staticmethod
     def update_E(e, a, o, q, s, n):
@@ -127,7 +163,7 @@ class ClockBacterium(Bacterium):
     def update_W():
         return ClockBacterium.eta
 
-    def propagate(self, t, **kwargs):
+    def metabolize(self, t, **kwargs):
         dt, k = kwargs["dt"], kwargs["k"]
         self.y += dt * self.NasA_oscIII_eta(y=self.y, t=t, k=k)
 
