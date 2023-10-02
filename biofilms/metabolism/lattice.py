@@ -58,7 +58,8 @@ class Lattice(abc.ABC):
     @classmethod
     def create_lattice(cls, name, **kwargs):
         if name == "clock":
-            return ClockLattice(kwargs["w"], kwargs["h"], kwargs["dt"], kwargs["max_t"], kwargs["video_name"])
+            return ClockLattice(kwargs["w"], kwargs["h"], kwargs["r"], kwargs["dt"], kwargs["max_t"],
+                                kwargs["video_name"])
         raise ValueError("Invalid lattice name: {}".format(name))
 
 
@@ -72,22 +73,29 @@ class ClockLattice(Lattice):
         (1, -1), (1, 0), (1, 1)
     ]
 
-    def __init__(self, w, h, dt, max_t, video_name):
+    def __init__(self, w, h, seed_ray, dt, max_t, video_name):
         super().__init__(w, h, dt, max_t, video_name)
-        seed = ClockBacterium(cx=self.get_center()[0],
-                              cy=self.get_center()[1],
-                              vel=np.zeros(2),
-                              y=self.init_conditions.copy(),
-                              specialization=MatrixProducing())
-        self.cells.append(seed)
-        self.frontier = [seed]
         self.pos = np.zeros((self.h, self.w))
-        self.pos[seed.row, seed.col] = 1
+        self._place_seed(seed_ray=seed_ray)
+        self.frontier = [seed for seed in self.cells]
         self.diffusion = np.zeros((self.h, self.w, 2))
         self.diffusion_kernel = np.array([[self.D / 2, self.D, self.D / 2],
                                           [self.D, 0, self.D],
                                           [self.D / 2, self.D, self.D / 2]])
         self._tree = None
+
+    def _place_seed(self, seed_ray):
+        w, h = self.get_center()
+        for i in range(w - 3, w + 3):
+            for j in range(h - 3, h + 3):
+                if np.linalg.norm(np.square(i - w) + np.square(j - h)) < seed_ray:
+                    seed = ClockBacterium(cx=i,
+                                          cy=j,
+                                          vel=np.zeros(2),
+                                          y=self.init_conditions.copy(),
+                                          specialization=MatrixProducing())
+                    self.cells.append(seed)
+                    self.pos[seed.row, seed.col] = 1
 
     def _metabolize(self, t):
         self.diffusion.fill(0)

@@ -16,6 +16,7 @@ def parse_args():
     parser.add_argument("--s", type=int, default=0, help="seed")
     parser.add_argument("--w", type=int, default=201, help="width in cells of the biofilm")
     parser.add_argument("--h", type=int, default=201, help="height in cells of the biofilm")
+    parser.add_argument("--r", type=int, default=3, help="ray of the initial seed of cells")
     parser.add_argument("--dt", type=float, default=0.3, help="integration step")
     parser.add_argument("--t", type=int, default=100, help="max simulation steps")
     parser.add_argument("--p", type=str, default="clock", help="problem")
@@ -69,6 +70,7 @@ def simulation(config, solution, video_name):
     world = Lattice.create_lattice(name=config.p,
                                    w=config.w,
                                    h=config.h,
+                                   r=config.r,
                                    dt=config.dt,
                                    max_t=config.t,
                                    video_name=video_name)
