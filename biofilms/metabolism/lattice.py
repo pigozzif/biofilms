@@ -109,7 +109,7 @@ class ClockLattice(Lattice):
             neighborhood = [(x, y) for x, y in self._get_neighborhood(parent_cell.row, parent_cell.col)
                             if self.pos[x, y] == 0]
             if neighborhood:
-                child = parent_cell.specialization.divide(parent=parent_cell, neighborhood=neighborhood)
+                child = parent_cell.divide(parent_cell=parent_cell, neighborhood=neighborhood)
                 if child is not None:  # TODO: fix OOP
                     self.cells.append(child)
                     self.pos[parent_cell.row, parent_cell.col] += 1

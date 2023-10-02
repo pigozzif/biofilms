@@ -114,8 +114,8 @@ class ClockBacterium(object):
     def move(self, dt, k):
         self._cx, self._cy, self.vel = self.specialization.move(self._cx, self._cy, self.vel, dt, k)
 
-    def divide(self, parent, neighborhood):
-        return self.specialization.divide(parent=parent, neighborhood=neighborhood)
+    def divide(self, parent_cell, neighborhood):
+        return self.specialization.divide(parent_cell=parent_cell, neighborhood=neighborhood)
 
     @staticmethod
     def update_E(e, a, o, q, s, n):
